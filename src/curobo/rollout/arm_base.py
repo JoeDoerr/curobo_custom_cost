@@ -336,6 +336,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         return RolloutBase._init_after_config_load(self)
 
     def cost_fn(self, state: KinematicModelState, action_batch=None, return_list=False):
+        #print("\nCOST FUNCTIONNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN\n")
         # ee_pos_batch, ee_rot_batch = state_dict["ee_pos_seq"], state_dict["ee_rot_seq"]
         state_batch = state.state_seq
         cost_list = []
@@ -370,11 +371,13 @@ class ArmBase(RolloutBase, ArmBaseConfig):
                 )
                 cost_list.append(coll_cost)
         if return_list:
+            #print("\n\n\ncost1\n\n\n", cost_list)
             return cost_list
         if self.sum_horizon:
             cost = cat_sum_horizon(cost_list)
         else:
             cost = cat_sum(cost_list)
+        #print("\n\n\ncost2\n\n\n", cost)
         return cost
 
     def constraint_fn(
@@ -734,10 +737,12 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         Returns:
             _description_
         """
+        #print("q_js", q_js)
         if self.kinematics.lock_jointstate is None:
             return q_js
         all_joint_names = self.kinematics.all_articulated_joint_names
         lock_joint_state = self.kinematics.lock_jointstate
+        #print("all joint names", all_joint_names, "lock joint state", lock_joint_state)
 
         new_js = q_js.get_augmented_joint_state(all_joint_names, lock_joint_state)
         return new_js

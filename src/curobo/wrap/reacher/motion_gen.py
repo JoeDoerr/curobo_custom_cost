@@ -83,6 +83,7 @@ from curobo.wrap.reacher.ik_solver import IKResult, IKSolver, IKSolverConfig
 from curobo.wrap.reacher.trajopt import TrajOptResult, TrajOptSolver, TrajOptSolverConfig
 from curobo.wrap.reacher.types import ReacherSolveState, ReacherSolveType
 
+import traceback
 
 @dataclass
 class MotionGenConfig:
@@ -3304,7 +3305,28 @@ class MotionGen(MotionGenConfig):
                 + str(goal_pose.shape)
             )
         # plan ik:
-
+        #MotionGen.IKSolver.WrapBase.NewtonOptBase=WrapBase
+        #self.ik_solver.solver.optimizers[1].custom_camera_wrap_base
+        #print(type(self.ik_solver), type(self.ik_solver.solver))
+        i = 0
+        for opt in self.ik_solver.solver.optimizers:
+            i += 1
+            #print(type(opt))
+            if i == 2:
+                # print(type(opt.rollout_fn)) #safetyrollout is an arm reacher
+                # for attr_name in dir(opt):
+                #     try:
+                #         # Get the attribute value
+                #         attr_value = getattr(opt, attr_name)
+                #         # Check if it's an instance of a user-defined class (not built-in types)
+                #         if isinstance(attr_value, object) and not callable(attr_value):
+                #             print(f"{attr_name}: {type(attr_value)} (instance of a class)")
+                #     except Exception as e:
+                #         # Handle any potential errors in getattr
+                #         print(f"Could not access attribute {attr_name}: {e}")
+                # print(opt.rollout_fn.custom_camera_cost)
+                opt.rollout_fn.custom_camera_cost = False
+                print(opt.rollout_fn.custom_camera_cost)
         ik_result = self._solve_ik_from_solve_state(
             goal_pose,
             solve_state,
@@ -3324,11 +3346,15 @@ class MotionGen(MotionGenConfig):
             solve_time=ik_result.solve_time,
         )
 
+        print("[JOE] -------------------------------------------------------------------------------------------------- IK finishing, before checking IK results")
+
         if self.store_debug_in_result:
             result.debug_info = {"ik_result": ik_result}
         ik_success = torch.count_nonzero(ik_result.success)
         if ik_success == 0:
             result.status = MotionGenStatus.IK_FAIL
+            #traceback.print_stack()
+            #raise KeyboardInterrupt()
             return result
 
         # do graph search:
@@ -3419,6 +3445,9 @@ class MotionGen(MotionGenConfig):
                 if plan_config.need_graph_success:
                     return result
 
+
+        print("[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now")
+        
         # do trajopt::
 
         if plan_config.enable_opt:
@@ -3510,6 +3539,7 @@ class MotionGen(MotionGenConfig):
                 self.trajopt_solver.interpolation_type = og_value
             if self.store_debug_in_result:
                 result.debug_info["trajopt_result"] = traj_result
+            print("[JOE] -------------------------------------------------------------------------------------------------- Particle optimization done, L-BFGS fine tuning now")
             # run finetune
             if plan_config.enable_finetune_trajopt and torch.count_nonzero(traj_result.success) > 0:
                 with profiler.record_function("motion_gen/finetune_trajopt"):
@@ -3588,6 +3618,7 @@ class MotionGen(MotionGenConfig):
             result.optimized_dt = traj_result.optimized_dt
             result.optimized_plan = traj_result.solution
             result.goalset_index = traj_result.goalset_index
+        print("[JOE] -------------------------------------------------------------------------------------------------- Returning result")
         return result
 
     def _plan_js_from_solve_state(

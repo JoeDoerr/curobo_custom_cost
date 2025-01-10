@@ -15,6 +15,7 @@ from typing import Dict, List, Optional
 # Third Party
 import torch
 import torch.autograd.profiler as profiler
+from curobo.rollout.cost.camera_cost import CameraCost
 
 # CuRobo
 from curobo.geom.sdf.world import WorldCollision
@@ -172,6 +173,8 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         # self.goal_ee_quat = None
         self._compute_g_dist = False
         self._n_goalset = 1
+        #Custom:
+        self.custom_camera_cost = True
 
         if self.cost_cfg.cspace_cfg is not None:
             self.cost_cfg.cspace_cfg.dof = self.d_action
@@ -209,6 +212,8 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             self._max_vel = self.state_bounds["velocity"][1]
             if self.zero_jerk_cost.hinge_value is not None:
                 self._compute_g_dist = True
+
+        self.camera_cost = CameraCost()
 
         self.z_tensor = torch.tensor(
             0, device=self.tensor_args.device, dtype=self.tensor_args.dtype
@@ -288,7 +293,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             and self.cost_cfg.cspace_cfg is not None
             and self.dist_cost.enabled
         ):
-
+            #print("[JOE] state batch shape", state_batch.position.shape, type(state_batch))
             joint_cost = self.dist_cost.forward_target_idx(
                 self._goal_buffer.goal_state.position,
                 state_batch.position,
@@ -323,6 +328,17 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 g_dist,
             )
             cost_list.append(z_vel)
+        #print("[JOE] ----------- COST FUN CALL", ee_pos_batch.shape, state_batch.position.shape, self.custom_camera_cost)
+        if self.custom_camera_cost == True:
+            #print(self.custom_camera_cost)
+            dists = self.camera_cost.forward(
+                ee_pos_batch,
+                ee_quat_batch,
+                self.camera_cost.obj_center,
+                # torch.tensor([1.05197, -.219925, 1.03373], device=ee_pos_batch.device)
+            )
+            cost_list.append(dists)
+
         with profiler.record_function("cat_sum"):
             if self.sum_horizon:
                 cost = cat_sum_horizon_reacher(cost_list)

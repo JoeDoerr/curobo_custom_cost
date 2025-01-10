@@ -69,13 +69,16 @@ def demo_full_config_mpc():
     )
     retract_pose = Pose(state.ee_pos_seq, quaternion=state.ee_quat_seq)
     start_state = JointState.from_position(retract_cfg, joint_names=joint_names)
-
+    retract_pose = Pose.from_list([-0.4, 0.0, 0.4, 1.0, 0.0, 0.0, 0.0])
     goal = Goal(
         current_state=start_state,
         goal_state=JointState.from_position(retract_cfg, joint_names=joint_names),
         goal_pose=retract_pose,
     )
     goal_buffer = mpc.setup_solve_single(goal, 1)
+
+    print("start state", start_state)
+    print("goal pose", retract_pose)
 
     # test_q = tensor_args.to_device( [2.7735, -1.6737,  0.4998, -2.9865,  0.3386,  0.8413,  0.4371])
     # start_state.position[:] = test_q
