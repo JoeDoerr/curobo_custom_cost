@@ -110,7 +110,16 @@ class CameraCost(CostBase):
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
         cost = dot_product
 
-        return 10000.0 * cost
+        batch_size = cost.shape[0]
+        size = cost.shape[1]
+        start=1.0
+        end=10000.0
+        step = (end - start) / size
+        out = torch.arange(start, end, step, device=torch.device("cuda:0"))
+        out = out.unsqueeze(0).repeat(batch_size, 1)
+        #print(out.shape, cost.shape)
+
+        return cost * out
 
 def quaternion_to_direction(quaternions):
     """

@@ -260,7 +260,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         ee_pos_batch, ee_quat_batch = state.ee_pos_seq, state.ee_quat_seq
         camera_pos_batch = state.link_pos_seq[:, :, 1, :] #Make sure that in link poses it is just camera_arm_link and this will make the links it cares about the ee, and camera_arm_link
         camera_quat_batch = state.link_quat_seq[:, :, 1, :]
-        print("camera_pos and quat shape", camera_pos_batch.shape, camera_quat_batch.shape)
+        #print("camera_pos and quat shape", camera_pos_batch.shape, camera_quat_batch.shape)
         g_dist = None
         with profiler.record_function("cost/pose"):
             if (
