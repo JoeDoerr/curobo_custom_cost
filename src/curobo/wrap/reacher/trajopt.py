@@ -1322,10 +1322,12 @@ class TrajOptSolver(TrajOptSolverConfig):
         """
         st_time = time.time()
         if self.trim_steps is not None:
+            #print("TRIM STEPS IS NOT NONE ---------------------------------------------------")
             result.action = result.action.trim_trajectory(self.trim_steps[0], self.trim_steps[1])
         interpolated_trajs, last_tstep, opt_dt, buffer_change = self.get_interpolated_trajectory(
             result.action
         )
+        #print("TRIM STEPS ---------------------------------------------------", self.trim_steps is not None)
 
         if self.sync_cuda_time:
             torch.cuda.synchronize(device=self.tensor_args.device)

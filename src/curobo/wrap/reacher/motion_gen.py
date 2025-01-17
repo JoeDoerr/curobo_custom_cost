@@ -48,6 +48,7 @@ import numpy as np
 import torch
 import torch.autograd.profiler as profiler
 import warp as wp
+import os
 
 # CuRobo
 from curobo.cuda_robot_model.cuda_robot_model import CudaRobotModel
@@ -3291,6 +3292,8 @@ class MotionGen(MotionGenConfig):
         Returns:
             MotionGenResult: Result of planning.
         """
+        print_things = False
+        log_file_path = os.path.expanduser("~/trace_curobo_logs.txt")
         trajopt_seed_traj = None
         trajopt_seed_success = None
         trajopt_newton_iters = None
@@ -3326,7 +3329,7 @@ class MotionGen(MotionGenConfig):
                 #         print(f"Could not access attribute {attr_name}: {e}")
                 # print(opt.rollout_fn.custom_camera_cost)
                 opt.rollout_fn.custom_camera_cost = False
-                print(opt.rollout_fn.custom_camera_cost)
+                #print(opt.rollout_fn.custom_camera_cost)
         ik_result = self._solve_ik_from_solve_state(
             goal_pose,
             solve_state,
@@ -3346,7 +3349,10 @@ class MotionGen(MotionGenConfig):
             solve_time=ik_result.solve_time,
         )
 
-        print("[JOE] -------------------------------------------------------------------------------------------------- IK finishing, before checking IK results")
+        if print_things == True:
+            with open(log_file_path, "a") as trace_log:
+                trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- IK finishing, before checking IK results\n")
+            print("[JOE] -------------------------------------------------------------------------------------------------- IK finishing, before checking IK results")
 
         if self.store_debug_in_result:
             result.debug_info = {"ik_result": ik_result}
@@ -3445,8 +3451,10 @@ class MotionGen(MotionGenConfig):
                 if plan_config.need_graph_success:
                     return result
 
-
-        print("[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now")
+        if print_things == True:
+            with open(log_file_path, "a") as trace_log:
+                trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now\n")
+            print("[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now")
         
         # do trajopt::
 
@@ -3526,6 +3534,10 @@ class MotionGen(MotionGenConfig):
                 self.trajopt_solver.interpolation_type = InterpolateType.LINEAR_CUDA
             with profiler.record_function("motion_gen/trajopt"):
                 log_info("MG: running TO")
+                if print_things == True:
+                    with open(log_file_path, "a") as trace_log:
+                        trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- TrajOpt function starting now\n")
+                    print("[JOE] -------------------------------------------------------------------------------------------------- TrajOpt function starting now")
                 traj_result = self._solve_trajopt_from_solve_state(
                     goal,
                     solve_state,
@@ -3539,7 +3551,10 @@ class MotionGen(MotionGenConfig):
                 self.trajopt_solver.interpolation_type = og_value
             if self.store_debug_in_result:
                 result.debug_info["trajopt_result"] = traj_result
-            print("[JOE] -------------------------------------------------------------------------------------------------- Particle optimization done, L-BFGS fine tuning now")
+            if print_things == True:
+                with open(log_file_path, "a") as trace_log:
+                    trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- TrajOpt done, fine tuning now\n")
+                print("[JOE] -------------------------------------------------------------------------------------------------- TrajOpt done, fine tuning now")
             # run finetune
             if plan_config.enable_finetune_trajopt and torch.count_nonzero(traj_result.success) > 0:
                 with profiler.record_function("motion_gen/finetune_trajopt"):
@@ -3618,7 +3633,10 @@ class MotionGen(MotionGenConfig):
             result.optimized_dt = traj_result.optimized_dt
             result.optimized_plan = traj_result.solution
             result.goalset_index = traj_result.goalset_index
-        print("[JOE] -------------------------------------------------------------------------------------------------- Returning result")
+        if print_things == True:
+            with open(log_file_path, "a") as trace_log:
+                trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- Returning result\n")
+            print("[JOE] -------------------------------------------------------------------------------------------------- Returning result")
         return result
 
     def _plan_js_from_solve_state(

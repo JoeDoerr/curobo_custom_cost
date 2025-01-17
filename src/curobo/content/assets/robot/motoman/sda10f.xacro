@@ -1,0 +1,101 @@
+<?xml version="1.0" ?>
+
+<robot name="motoman_sda10f" xmlns:xacro="http://ros.org/wiki/xacro">
+	<xacro:include filename="$(find motoman_sda10f_support)/urdf/sda10f_macro.xacro" />
+	<xacro:include filename="$(find robotiq_2f_85_gripper_visualization)/urdf/robotiq_arg2f_85_model_macro.xacro" />
+
+	<xacro:motoman_sda10f prefix=""/>
+	<xacro:robotiq_arg2f_85 prefix="" />
+
+	<link name="robotiq_arg2f_extra_link" >
+		<visual>
+			<origin rpy="0 0 0" xyz="0 0 0" />
+			<geometry>
+				<cylinder radius="0.04" length="0.017"/>
+			</geometry>
+			<material name="">
+				<color rgba="0.1 0.1 0.9 1" />
+			</material>
+		</visual>
+		<collision>
+			<origin rpy="0 0 0" xyz="0 0 0" />
+			<geometry>
+				<cylinder radius="0.04" length="0.017"/>
+			</geometry>
+		</collision>
+	</link>
+
+	<joint name="motoman_right_joint_pre_ee" type="fixed">
+		<parent link="arm_right_link_tool0"/>
+		<child link="robotiq_arg2f_extra_link"/>
+    <origin xyz="0 0 0.0085" rpy="0 0 1.5708" />
+	</joint>
+
+	<joint name="motoman_right_joint_ee_extra" type="fixed">
+		<parent link="robotiq_arg2f_extra_link"/>
+		<child link="robotiq_arg2f_base_link"/>
+		<origin xyz="0 0 0.0085" rpy="0 0 0" />
+	</joint>
+
+	<joint name="motoman_right_joint_ee" type="fixed">
+		<parent link="robotiq_arg2f_base_link"/>
+		<child link="motoman_right_ee"/>
+		<origin rpy="0 0 0" xyz="0 0 0.135"/>
+	</joint>
+	<link name="motoman_right_ee"></link>
+
+	<joint name="motoman_left_joint_ee" type="fixed">
+		<parent link="arm_left_link_tool0" />
+		<child link="motoman_left_ee" />
+		<origin rpy="0 0 0" xyz="0 0 0" />
+	</joint>
+	<link name="motoman_left_ee" />
+
+	<link name="camera_torso_link" >
+		<visual>
+			<origin rpy="0 0 0" xyz="0 0 0" />
+			<geometry>
+				<cylinder radius="0.08" length="0.12"/>
+			</geometry>
+			<material name="">
+				<color rgba="0.9 0.1 0.9 1" />
+			</material>
+		</visual>
+		<collision>
+			<origin rpy="0 0 0" xyz="0 0 0" />
+			<geometry>
+				<cylinder radius="0.08" length="0.12"/>
+			</geometry>
+		</collision>
+	</link>
+	<joint name="camera_torso_joint" type="fixed">
+		<parent link="torso_link_b1" />
+		<child link="camera_torso_link" />
+		<origin rpy="0 0 0" xyz="0.1 0.0 0.2" />
+	</joint>
+
+	<link name="camera_arm_link" >
+		<visual>
+			<origin rpy="0 0 0" xyz="0 0 0" />
+			<geometry>
+				<box size="0.12 0.06 0.05" />
+			</geometry>
+			<material name="">
+				<color rgba="0.9 0.1 0.9 1" />
+			</material>
+		</visual>
+		<collision>
+			<origin rpy="0 0 0" xyz="0 0 0" />
+			<geometry>
+				<box size="0.12 0.06 0.05" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="camera_arm_joint" type="fixed">
+		<parent link="arm_right_link_6_b" />
+		<child link="camera_arm_link" />
+		<origin rpy="0 0 0" xyz="0 0.06 0.1" />
+	</joint>
+
+</robot>
+

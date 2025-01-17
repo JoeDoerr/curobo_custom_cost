@@ -336,7 +336,6 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         return RolloutBase._init_after_config_load(self)
 
     def cost_fn(self, state: KinematicModelState, action_batch=None, return_list=False):
-        #print("\nCOST FUNCTIONNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN\n")
         # ee_pos_batch, ee_rot_batch = state_dict["ee_pos_seq"], state_dict["ee_rot_seq"]
         state_batch = state.state_seq
         cost_list = []
@@ -349,16 +348,19 @@ class ArmBase(RolloutBase, ArmBaseConfig):
                     self._goal_buffer.retract_state,
                     self._goal_buffer.batch_retract_state_idx,
                 )
+                #print("bound_cost", c.mean())
                 cost_list.append(c)
         if self.cost_cfg.manipulability_cfg is not None and self.manipulability_cost.enabled:
             raise NotImplementedError("Manipulability Cost is not implemented")
         if self.cost_cfg.stop_cfg is not None and self.stop_cost.enabled:
             st_cost = self.stop_cost.forward(state_batch.velocity)
+            #print("manipulability_cost", st_cost.mean())
             cost_list.append(st_cost)
         if self.cost_cfg.self_collision_cfg is not None and self.robot_self_collision_cost.enabled:
             with profiler.record_function("cost/self_collision"):
                 coll_cost = self.robot_self_collision_cost.forward(state.robot_spheres)
                 # cost += coll_cost
+                #print("coll_cost", coll_cost.mean())
                 cost_list.append(coll_cost)
         if (
             self.cost_cfg.primitive_collision_cfg is not None
@@ -369,6 +371,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
                     state.robot_spheres,
                     env_query_idx=self._goal_buffer.batch_world_idx,
                 )
+                #print("collision_cost", coll_cost.mean())
                 cost_list.append(coll_cost)
         if return_list:
             #print("\n\n\ncost1\n\n\n", cost_list)
@@ -597,10 +600,26 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         # print(act_seq.shape, self._goal_buffer.batch_current_state_idx)
         if self.start_state is None:
             raise ValueError("start_state is not set in rollout")
+        #print("act seq shape", type(act_seq), act_seq.shape)
+        #random_values = torch.rand_like(act_seq[-1, -1, :])
+        #act_seq[-1, -1, :] = act_seq[-1, -1, :] * random_values
+        #if self.custom_camera_cost == True:
+        #    act_seq = act_seq * 1.5
+        # try:
+        #     print("last action, second to last action, third to last action", act_seq[-1, -1, :], "\n", act_seq[-1, -2, :], "\n", act_seq[-1, -3, :], "\n", act_seq[-1, -4, :], "\n", act_seq[-1, -5, :])
+        #     print(self._goal_buffer.batch_current_state_idx)
+        # except Exception as e:
+        #     print(f"An error occurred: {e}")
+        
         with profiler.record_function("robot_model/rollout"):
             state = self.dynamics_model.forward(
                 self.start_state, act_seq, self._goal_buffer.batch_current_state_idx
             )
+
+        # try:
+        #     print("goal value from rollout_fn then before states", state.state_seq[-1, -1, :], "\n", state.state_seq[-1, -2, :], "\n", state.state_seq[-1, -3, :], "\n", state.state_seq[-1, -4, :], "\n", state.state_seq[-1, -5, :])
+        # except Exception as e:
+        #     print(f"An error occurred: {e}")
 
         with profiler.record_function("cost/all"):
             cost_seq = self.cost_fn(state, act_seq)
