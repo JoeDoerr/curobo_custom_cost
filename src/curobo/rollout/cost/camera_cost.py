@@ -1,5 +1,6 @@
 from curobo.rollout.cost.pose_cost import *
 import torch.nn.functional as F
+import rospy
 
 # TODO: test this implementation
 # TODO: fix inheritance (PoseCost is not used at all right now. Is a config class even necessary right now?)
@@ -7,7 +8,9 @@ class CameraCost(CostBase):
     def __init__(self, config: CostConfig = None):
         self.weight = torch.tensor(1, device=torch.device("cuda:0"))
         self.tensor_args = TensorDeviceType()
-        self.obj_center = torch.tensor([[[1.05197, -.219925, 1.03373]]], device=torch.device("cuda:0")) #Mustard 02 perishables
+        lookat_pos = rospy.get_param("/camera_lookat_position", [0.0,0.0,0.0])
+        self.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0).unsqueeze(0)
+        #self.obj_center = torch.tensor([[[1.05197, -.219925, 1.03373]]], device=torch.device("cuda:0")) #Mustard 02 perishables
         #self.obj_center = torch.tensor([[[1.45, -.15, 1.22]]], device=torch.device("cuda:0")) 
         #self.obj_center = torch.tensor([1.12, 0.140003, 1.05591], device=torch.device("cuda:0")) #Chips can
         self.ref_vec = torch.tensor([1, 0, 0], device=torch.device("cuda:0"))
