@@ -24,10 +24,10 @@ robot_cfg:
     ee_link: "motoman_right_ee"
     link_names: ["camera_arm_link"]
     lock_joints: {
-      "arm_left_joint_1_s": 0.0,
-      "arm_left_joint_2_l": 0.0,
+      "arm_left_joint_1_s": 1.75,
+      "arm_left_joint_2_l": 0.8,
       "arm_left_joint_3_e": 0.0,
-      "arm_left_joint_4_u": 0.0,
+      "arm_left_joint_4_u": -0.66,
       "arm_left_joint_5_r": 0.0,
       "arm_left_joint_6_b": 0.0,
       "arm_left_joint_7_t": 0.0,
@@ -35,15 +35,15 @@ robot_cfg:
       }
 
     extra_links: null
-      # {
-      # "attached_object":{
-      #   "parent_link_name": "robotiq_arg2f_base_link",
-      #   "link_name": "attached_object",
-      #   "fixed_transform": [0.0,0.0,0.0,1.0,0.0,0.0,0.0],
-      #   "joint_type": "FIXED",
-      #   "joint_name": "attach_joint"
-      #   }
-      # }
+    # {
+    #   "attached_object":{
+    #     "parent_link_name": "motoman_right_ee",
+    #     "link_name": "attached_object",
+    #     "fixed_transform": [0,0,0,1,0,0,0],
+    #     "joint_type": "FIXED",
+    #     "joint_name": "attach_joint"
+    #     }
+    #   }
 
     collision_link_names: [
       "torso_base_link",
@@ -67,7 +67,7 @@ robot_cfg:
       "right_outer_finger",
       "right_inner_finger",
       "left_inner_finger",
-      # "attached_object",
+      "motoman_right_ee",
     ]
 
     collision_spheres:
@@ -136,35 +136,39 @@ robot_cfg:
         - center: [0.0, 0.0, -0.05]
           radius: 0.065
       arm_right_link_7_t:
-        - center: [-0.05, -0.07, -0.1]
-          radius: 0.065
-        - center: [0.05, -0.07, -0.1]
-          radius: 0.065
-        - center: [0.0, -0.07, -0.1]
-          radius: 0.065
         - center: [0.0, 0.0, -0.05]
           radius: 0.065
+        - center: [-0.04, -0.061, 0.04]
+          radius: 0.03
+        - center: [0.04, -0.061, 0.04]
+          radius: 0.03
+        - center: [0.0, -0.061, 0.04]
+          radius: 0.03
       robotiq_arg2f_base_link:
         - center: [0.0, 0.0, 0.05]
           radius: 0.05
         - center: [0.0, 0.0, 0.0]
           radius: 0.05
       left_outer_finger:
-        - center: [0.0, 0.0, 0.0]
-          radius: 0.025
+        - center: [0.0, -0.01, 0.01]
+          radius: 0.022
       right_outer_finger:
-        - center: [0.0, 0.0, 0.0]
-          radius: 0.025
+        - center: [0.0, -0.01, 0.01]
+          radius: 0.022
       right_inner_finger:
-        - center: [0.0, -0.01, 0.05]
-          radius: 0.025
-        - center: [0.0, -0.01, 0.0]
-          radius: 0.025
+        - center: [0.0, -0.012, -0.008]
+          radius: 0.022
+        - center: [0.0, -0.02, 0.025]
+          radius: 0.012
+        - center: [0.0, -0.02, 0.045]
+          radius: 0.012
       left_inner_finger:
-        - center: [0.0, -0.01, 0.0]
-          radius: 0.025
-        - center: [0.0, -0.01, 0.05]
-          radius: 0.025
+        - center: [0.0, -0.012, -0.008]
+          radius: 0.022
+        - center: [0.0, -0.02, 0.025]
+          radius: 0.012
+        - center: [0.0, -0.02, 0.045]
+          radius: 0.012
       torso_link_b1:
         - center: [0.1, 0.0, 0.0]
           radius: 0.18
@@ -173,7 +177,7 @@ robot_cfg:
         - center: [0.1, 0.0, 0.2]
           radius: 0.1
     collision_sphere_buffer: 0.001 # float or Dict[str, float]
-    extra_collision_spheres: {}
+    extra_collision_spheres: {"motoman_right_ee": 256}
     self_collision_ignore: {
       "torso_base_link": ["torso_link_b1","arm_left_link_1_s","arm_right_link_1_s"],
       "torso_link_b1": ["arm_left_link_1_s","arm_right_link_1_s","arm_left_link_2_l","arm_right_link_2_l"],
@@ -188,12 +192,13 @@ robot_cfg:
       "arm_left_link_5_r": ["arm_left_link_6_b","arm_left_link_7_t"],
       "arm_right_link_5_r": ["arm_right_link_6_b","arm_right_link_7_t","robotiq_arg2f_base_link"],
       "arm_left_link_6_b": ["arm_left_link_7_t"],
-      "arm_right_link_6_b": ["arm_right_link_7_t","robotiq_arg2f_base_link","left_outer_finger","right_outer_finger","right_inner_finger","left_inner_finger"],
-      "arm_right_link_7_t": ["robotiq_arg2f_base_link","left_outer_finger","right_outer_finger","right_inner_finger","left_inner_finger"],
+      "arm_right_link_6_b": ["arm_right_link_7_t","robotiq_arg2f_base_link","left_outer_finger","right_outer_finger","right_inner_finger","left_inner_finger","motoman_right_ee"],
+      "arm_right_link_7_t": ["robotiq_arg2f_base_link","left_outer_finger","right_outer_finger","right_inner_finger","left_inner_finger","motoman_right_ee"],
       "robotiq_arg2f_base_link": ["left_outer_finger","right_outer_finger","right_inner_finger","left_inner_finger","motoman_right_ee"],
       "left_outer_finger": ["right_outer_finger","right_inner_finger","left_inner_finger","motoman_right_ee"],
       "right_outer_finger": ["right_inner_finger","left_inner_finger","motoman_right_ee"],
       "right_inner_finger": ["left_inner_finger","motoman_right_ee"],
+      "left_inner_finger": ["motoman_right_ee"],
       }
     self_collision_buffer: {
       "torso_base_link": 0,
@@ -217,7 +222,7 @@ robot_cfg:
       "right_outer_finger": 0,
       "right_inner_finger": 0,
       "left_inner_finger": 0,
-      # "attached_object": 0,
+      "motoman_right_ee": 0,
       }
 
     use_global_cumul: True
@@ -260,5 +265,5 @@ robot_cfg:
       retract_config: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
       null_space_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
       cspace_distance_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      max_jerk: 100.0
+      max_jerk: 300.0
       max_acceleration: 15.0
