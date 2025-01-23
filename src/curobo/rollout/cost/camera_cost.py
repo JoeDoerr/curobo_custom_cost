@@ -1,6 +1,8 @@
 from curobo.rollout.cost.pose_cost import *
 import torch.nn.functional as F
 import rospy
+import time
+import torch
 
 # TODO: test this implementation
 # TODO: fix inheritance (PoseCost is not used at all right now. Is a config class even necessary right now?)
@@ -9,6 +11,8 @@ class CameraCost(CostBase):
         self.weight = torch.tensor(1, device=torch.device("cuda:0"))
         self.tensor_args = TensorDeviceType()
         lookat_pos = rospy.get_param("/camera_lookat_position", [0.0,0.0,0.0])
+        self.update_time = time.time()
+        #print("lookat position", lookat_pos)
         self.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0).unsqueeze(0)
         #self.obj_center = torch.tensor([[[1.05197, -.219925, 1.03373]]], device=torch.device("cuda:0")) #Mustard 02 perishables
         #self.obj_center = torch.tensor([[[1.45, -.15, 1.22]]], device=torch.device("cuda:0")) 
@@ -97,8 +101,13 @@ class CameraCost(CostBase):
     def forward(self, camera_pos_batch, camera_rot_batch, obj_center, link_name: str = None):
         #print("camera pos batch size inp", camera_pos_batch.shape)
         # Compute the desired quaternion
+        #if self.update_time - time.time() > 10.0:
+            #self.update_time = time.time()
+        #lookat_pos = rospy.get_param("/camera_lookat_position", [0.0,0.0,0.0])
+        #self.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0) #[1, 1, 3]
+        #print("obj_center updated", self.obj_center)
 
-        obj_center = self.obj_center
+        obj_center = self.obj_center.squeeze()
         obj_center = obj_center.expand_as(camera_pos_batch)
 
         #Desired direction vectors
@@ -115,8 +124,8 @@ class CameraCost(CostBase):
 
         batch_size = cost.shape[0]
         size = cost.shape[1]
-        start=1.0
-        end=10000.0
+        start=1000.0
+        end=1.0
         step = (end - start) / size
         out = torch.arange(start, end, step, device=torch.device("cuda:0"))
         out = out.unsqueeze(0).repeat(batch_size, 1)

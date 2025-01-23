@@ -85,6 +85,7 @@ from curobo.wrap.reacher.trajopt import TrajOptResult, TrajOptSolver, TrajOptSol
 from curobo.wrap.reacher.types import ReacherSolveState, ReacherSolveType
 
 import traceback
+import rospy
 
 @dataclass
 class MotionGenConfig:
@@ -1455,6 +1456,8 @@ class MotionGen(MotionGenConfig):
         self._pose_rollout_list = None
         self._kin_list = None
         self.update_batch_size(seeds=self.trajopt_seeds)
+        #: Custom kevin rays
+        self.rays_collision_checker = None
 
     def update_batch_size(self, seeds=10, batch=1):
         """Update the batch size for motion generation.
@@ -3272,6 +3275,26 @@ class MotionGen(MotionGenConfig):
         best_result.total_time = time.time() - start_time
         return best_result
 
+    def rospy_communication_custom(self):
+        lookat_pos = rospy.get_param("/camera_lookat_position", [0.0,0.0,0.0])
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.camera_cost.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0) #[1, 1, 3]
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.camera_cost.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0) #[1, 1, 3]
+        #print("updated obj_center", self.trajopt_solver.optimizers[0].rollout_fn.camera_cost.obj_center)
+
+        #Get ray normalized direction vectors and the origin of the rays
+        default = np.zeros((36, 3)).tolist()
+        rays = rospy.get_param("/rays_from_perception", default) #list
+        rays = np.asarray(rays)
+        rays_origin = rospy.get_param("/rays_origin_from_perception", [0.0,0.0,0.0])
+        rays_origin = np.asarray(rays_origin)
+
+        #x1 = [3], x2_batch = [num_rays, 3], length=1, spheres=64, r=.01
+        ray_endpoints = (0.5 * rays) + np.expand_dims(rays_origin, axis=0) #rays=[rays, 3], rays_origin after expand=[1, 3]
+        ray_mask = self.rays_collision_checker.raytrace_batch(rays_origin, ray_endpoints, length=1.0, spheres=2, r=0.0001)
+        ray_mask_np = ray_mask.cpu().numpy()
+        print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
+        rospy.set_param("/ray_masks", ray_mask_np.tolist())
+
     def _plan_from_solve_state(
         self,
         solve_state: ReacherSolveState,
@@ -3538,6 +3561,38 @@ class MotionGen(MotionGenConfig):
                     with open(log_file_path, "a") as trace_log:
                         trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- TrajOpt function starting now\n")
                     print("[JOE] -------------------------------------------------------------------------------------------------- TrajOpt function starting now")
+                # print("self.trajopt_solver", type(self.trajopt_solver.solver)) #TrajOptSolver, trajopt_solver, arm_base, safety_rollout, .camera_cost
+                # print(type(self.trajopt_solver.solver.safety_rollout))
+                # print(type(self.trajopt_solver.solver.optimizers[0]))
+                # print(type(self.trajopt_solver.solver.optimizers[1]))
+                # print(type(self.trajopt_solver.solver.optimizers[0].rollout_fn))
+                # print(type(self.trajopt_solver.solver.optimizers[1].rollout_fn))
+                #print(type(self.trajopt_solver.solver.optimizers[0].rollout_fn.camera_cost))
+                # # Check the type of each attribute
+                # members = [
+                #     name for name, obj in vars(self.trajopt_solver).items()
+                #     if isinstance(type(obj), type)  # Check if the type of the attribute is a class
+                # ]
+                # print("members", members)
+                # lookat_pos = rospy.get_param("/camera_lookat_position", [0.0,0.0,0.0])
+                # self.trajopt_solver.solver.optimizers[0].rollout_fn.camera_cost.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0) #[1, 1, 3]
+                # self.trajopt_solver.solver.optimizers[1].rollout_fn.camera_cost.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0) #[1, 1, 3]
+                # #print("updated obj_center", self.trajopt_solver.optimizers[0].rollout_fn.camera_cost.obj_center)
+
+                # #Run rays here:
+                # default = np.zeros((36, 3)).tolist()
+                # rays = rospy.get_param("/rays_from_perception", default) #list
+                # rays = np.asarray(rays)
+                # rays_origin = rospy.get_param("/rays_origin_from_perception", [0.0,0.0,0.0])
+                # rays_origin = np.asarray(rays_origin)
+                # #x1 = [3], x2_batch = [num_rays, 3], length=1, spheres=64, r=.01
+                # ray_endpoints = rays + np.expand_dims(rays_origin, axis=0) #rays=[rays, 3], rays_origin after expand=[1, 3]
+                # ray_mask = self.rays_collision_checker.raytrace_batch(rays_origin, ray_endpoints, length=1.0, r=0.01)
+                # ray_mask_np = ray_mask.cpu().numpy()
+                # print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
+                # rospy.set_param("/ray_masks", ray_mask_np.tolist())
+                self.rospy_communication_custom()
+
                 traj_result = self._solve_trajopt_from_solve_state(
                     goal,
                     solve_state,

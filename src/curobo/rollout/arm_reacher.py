@@ -372,7 +372,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 # torch.tensor([1.05197, -.219925, 1.03373], device=ee_pos_batch.device)
             )
             #print("custom_cost", dists.mean(), dists.shape)
-            cost_list.append(dists)
+            #cost_list.append(dists)
 
         with profiler.record_function("cat_sum"):
             if self.sum_horizon:
