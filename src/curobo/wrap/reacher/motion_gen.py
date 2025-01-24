@@ -3289,11 +3289,17 @@ class MotionGen(MotionGenConfig):
         rays_origin = np.asarray(rays_origin)
 
         #x1 = [3], x2_batch = [num_rays, 3], length=1, spheres=64, r=.01
-        ray_endpoints = (0.5 * rays) + np.expand_dims(rays_origin, axis=0) #rays=[rays, 3], rays_origin after expand=[1, 3]
-        ray_mask = self.rays_collision_checker.raytrace_batch(rays_origin, ray_endpoints, length=1.0, spheres=2, r=0.0001)
+        length = 0.9
+        ray_endpoints = (length * rays) + np.expand_dims(rays_origin, axis=0) #rays=[rays, 3], rays_origin after expand=[1, 3]
+        ray_mask = self.rays_collision_checker.raytrace_batch(rays_origin, ray_endpoints, length=length, spheres=64, r=0.01)
         ray_mask_np = ray_mask.cpu().numpy()
         print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
         rospy.set_param("/ray_masks", ray_mask_np.tolist())
+        torch_rays = torch.from_numpy(rays[ray_mask_np], device=torch.device("cuda:0"))
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin, device=torch.device("cuda:0")) 
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin, device=torch.device("cuda:0")) 
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.rays = torch.from_numpy(torch_rays, device=torch.device("cuda:0")) 
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.rays = torch.from_numpy(torch_rays, device=torch.device("cuda:0")) 
 
     def _plan_from_solve_state(
         self,
@@ -3352,6 +3358,7 @@ class MotionGen(MotionGenConfig):
                 #         print(f"Could not access attribute {attr_name}: {e}")
                 # print(opt.rollout_fn.custom_camera_cost)
                 opt.rollout_fn.custom_camera_cost = False
+                opt.rollout_fn.custom_ray_cost = False
                 #print(opt.rollout_fn.custom_camera_cost)
         ik_result = self._solve_ik_from_solve_state(
             goal_pose,

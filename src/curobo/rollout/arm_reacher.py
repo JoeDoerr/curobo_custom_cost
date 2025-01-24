@@ -16,6 +16,7 @@ from typing import Dict, List, Optional
 import torch
 import torch.autograd.profiler as profiler
 from curobo.rollout.cost.camera_cost import CameraCost
+from curobo.rollout.cost.ray_cost import RayCost
 
 # CuRobo
 from curobo.geom.sdf.world import WorldCollision
@@ -175,6 +176,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         self._n_goalset = 1
         #Custom:
         self.custom_camera_cost = True
+        self.custom_ray_cost = True
 
         if self.cost_cfg.cspace_cfg is not None:
             self.cost_cfg.cspace_cfg.dof = self.d_action
@@ -194,8 +196,10 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             for i in self.kinematics.link_names:
                 if i != self.kinematics.ee_link:
                     self._link_pose_costs[i] = PoseCost(self.cost_cfg.link_pose_cfg)
+        self.cost_cfg.straight_line_cfg = CostConfig(weight=5.0, vec_weight=1.0, tensor_args=self.tensor_args)
         if self.cost_cfg.straight_line_cfg is not None:
             self.straight_line_cost = StraightLineCost(self.cost_cfg.straight_line_cfg)
+            self.straight_line_cost.enable_cost()
         if self.cost_cfg.zero_vel_cfg is not None:
             self.zero_vel_cost = ZeroCost(self.cost_cfg.zero_vel_cfg)
             self._max_vel = self.state_bounds["velocity"][1]
@@ -214,6 +218,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 self._compute_g_dist = True
 
         self.camera_cost = CameraCost()
+        self.ray_cost = RayCost()
 
         self.z_tensor = torch.tensor(
             0, device=self.tensor_args.device, dtype=self.tensor_args.dtype
@@ -373,6 +378,9 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             )
             #print("custom_cost", dists.mean(), dists.shape)
             #cost_list.append(dists)
+        if self.custom_ray_cost == True:
+            output_ray_costs = self.ray_cost.forward(camera_pos_batch, camera_quat_batch)
+            cost_list.append(output_ray_costs)
 
         with profiler.record_function("cat_sum"):
             if self.sum_horizon:
