@@ -19,37 +19,6 @@ class RayCost(CostBase):
         self.rays = torch.zeros((36, 3), device=torch.device("cuda:0"))
         CostBase.__init__(self, config)
 
-    def look_at_obj_quaternion(self, camera_pos_batch, obj_center):
-        #print("camera pos batch shape", camera_pos_batch.shape, obj_center.shape) #[batch, trajectory_points, 3], [1, 1, 3]
-        # Compute "optimal" orientation (points toward object center)
-
-#        obj_center = obj_center.to(camera_pos_batch.device)
-
-        obj_center = self.obj_center
-        obj_center = obj_center.expand_as(camera_pos_batch)
-
-        # Direction vectors
-        direction_vector_batch = obj_center - camera_pos_batch
-        normalized_directions = F.normalize(direction_vector_batch, p=2, dim=-1)
-
-        # Use standard reference vector
-        ref_vec = self.ref_vec.expand_as(normalized_directions)
-
-        # Compute rotation axes
-        axes = torch.linalg.cross(ref_vec.expand_as(normalized_directions).float(), normalized_directions.float())
-        normalized_axes = F.normalize(axes, p=2, dim=-1)
-
-        # Compute rotation angles
-        dot_products = torch.sum(normalized_directions.float() * ref_vec.expand_as(normalized_directions).float(), dim=-1)
-        angles = torch.acos(torch.clamp(dot_products, -1.0, 1.0))
-
-        # Construct quaternions
-        w = torch.cos(angles / 2)
-        xyz = torch.sin(angles / 2).unsqueeze(-1) * normalized_axes
-        quaternions = torch.cat([w.unsqueeze(-1), xyz], dim=-1)
-
-        return quaternions
-
     def cost_scaling_very_front_heavy(self, cost):
         batch_size = cost.shape[0]
         size = cost.shape[1]
@@ -112,7 +81,6 @@ class RayCost(CostBase):
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
         ori_cost = dot_product
 
-        scale = self.cost_scaling_very_front_heavy(cost)
         #---------------------Orientation^
 
         #Position:
@@ -120,6 +88,8 @@ class RayCost(CostBase):
         #
 
         cost = ori_cost + pos_cost
+
+        scale = self.cost_scaling_very_front_heavy(cost)
 
         return cost * scale
 

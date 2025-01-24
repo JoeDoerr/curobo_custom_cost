@@ -3295,11 +3295,12 @@ class MotionGen(MotionGenConfig):
         ray_mask_np = ray_mask.cpu().numpy()
         print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
         rospy.set_param("/ray_masks", ray_mask_np.tolist())
-        torch_rays = torch.from_numpy(rays[ray_mask_np], device=torch.device("cuda:0"))
-        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin, device=torch.device("cuda:0")) 
-        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin, device=torch.device("cuda:0")) 
-        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.rays = torch.from_numpy(torch_rays, device=torch.device("cuda:0")) 
-        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.rays = torch.from_numpy(torch_rays, device=torch.device("cuda:0")) 
+        torch_rays = torch.from_numpy(rays[ray_mask_np]).to(device=self.tensor_args.device, dtype=self.tensor_args.dtype)
+        torch_rays_origin = torch.from_numpy(rays_origin).to(device=self.tensor_args.device, dtype=self.tensor_args.dtype)
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin = torch_rays_origin
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.origin = torch_rays_origin
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.rays = torch_rays # torch.from_numpy(torch_rays).to("cuda:0")
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.rays = torch_rays # torch.from_numpy(torch_rays).to("cuda:0")
 
     def _plan_from_solve_state(
         self,

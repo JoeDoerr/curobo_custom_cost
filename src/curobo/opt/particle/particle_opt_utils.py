@@ -121,7 +121,10 @@ def get_stomp_cov_jit(
                         A[k * horizon + i, k * horizon + index] = fd_array[j + 3]
 
     R = torch.matmul(A.transpose(-2, -1).clone(), A.clone())
-    M = torch.inverse(R)
+    # M = torch.inverse(R)
+    U, S, V = torch.svd(R)
+    S_inv = torch.diag(1.0 / S)
+    M = torch.matmul(torch.matmul(V, S_inv), U.t())
     scaled_M = (1 / horizon) * M / (torch.max(torch.abs(M), dim=1)[0].unsqueeze(0))
     cov = M / torch.max(torch.abs(M))
 
