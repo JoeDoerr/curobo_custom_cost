@@ -352,7 +352,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             cost_list.append(z_vel)
         #print("[JOE] ----------- COST FUN CALL", ee_pos_batch.shape, state_batch.position.shape, self.custom_camera_cost)
         #print(self.custom_camera_cost)
-        if self.custom_camera_cost == True:
+        #if self.custom_camera_cost == True:
             #print(self.custom_camera_cost)
             # camera_pose = state.link_pose["camera_arm_link"]
             # camera_pos_batch = camera_pose.position
@@ -370,12 +370,12 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             #     self.camera_cost.obj_center,
             #     # torch.tensor([1.05197, -.219925, 1.03373], device=ee_pos_batch.device)
             # )
-            dists = self.camera_cost.forward(
-                camera_pos_batch,
-                camera_quat_batch,
-                self.camera_cost.obj_center,
-                # torch.tensor([1.05197, -.219925, 1.03373], device=ee_pos_batch.device)
-            )
+            # dists = self.camera_cost.forward(
+            #     camera_pos_batch,
+            #     camera_quat_batch,
+            #     self.camera_cost.obj_center,
+            #     # torch.tensor([1.05197, -.219925, 1.03373], device=ee_pos_batch.device)
+            # )
             #print("custom_cost", dists.mean(), dists.shape)
             #cost_list.append(dists)
         if self.custom_ray_cost == True:

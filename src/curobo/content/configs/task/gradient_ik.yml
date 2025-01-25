@@ -68,7 +68,7 @@ lbfgs:
   min_iters: null
   line_search_scale:  [0.1, 0.3, 0.7, 1.0]
   fixed_iters: True
-  cost_convergence: 1e-11
+  cost_convergence: 1000000 #1e-11
   cost_delta_threshold: 1e-11 #0.0001
   cost_relative_threshold: 0.999
   epsilon: 0.01 #0.01 # used only in stable_mode

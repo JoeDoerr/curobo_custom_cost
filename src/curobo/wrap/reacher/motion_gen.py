@@ -3294,12 +3294,14 @@ class MotionGen(MotionGenConfig):
         ray_mask = self.rays_collision_checker.raytrace_batch(rays_origin, ray_endpoints, length=length, spheres=64, r=0.01)
         ray_mask_np = ray_mask.cpu().numpy()
         print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
-        rospy.set_param("/ray_masks", ray_mask_np.tolist())
-        torch_rays = torch.from_numpy(rays[ray_mask_np], device=torch.device("cuda:0"))
-        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin, device=torch.device("cuda:0")) 
-        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin, device=torch.device("cuda:0")) 
-        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.rays = torch.from_numpy(torch_rays, device=torch.device("cuda:0")) 
-        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.rays = torch.from_numpy(torch_rays, device=torch.device("cuda:0")) 
+        #rospy.set_param("/ray_masks", ray_mask_np.tolist())
+        rospy.set_param("/rays_collision_free", rays[ray_mask_np].tolist())
+        rospy.set_param("/motion_gen_origin", rays_origin.tolist()) #Do this to ensure we use the matching collision free rays with the origin that the rays had
+        torch_rays = torch.from_numpy(rays[ray_mask_np]).to('cuda')
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin).to('cuda')
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin).to('cuda')
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.rays = torch_rays.to('cuda')
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.rays = torch_rays.to('cuda')
 
     def _plan_from_solve_state(
         self,
@@ -3321,7 +3323,7 @@ class MotionGen(MotionGenConfig):
         Returns:
             MotionGenResult: Result of planning.
         """
-        print_things = False
+        print_things = True
         log_file_path = os.path.expanduser("~/trace_curobo_logs.txt")
         trajopt_seed_traj = None
         trajopt_seed_success = None
@@ -3598,7 +3600,9 @@ class MotionGen(MotionGenConfig):
                 # ray_mask_np = ray_mask.cpu().numpy()
                 # print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
                 # rospy.set_param("/ray_masks", ray_mask_np.tolist())
+                t0 = time.time()
                 self.rospy_communication_custom()
+                print("time communication took", time.time() - t0)
 
                 traj_result = self._solve_trajopt_from_solve_state(
                     goal,

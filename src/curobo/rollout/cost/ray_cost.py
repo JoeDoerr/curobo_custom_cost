@@ -50,6 +50,48 @@ class RayCost(CostBase):
 
         return quaternions
 
+    @staticmethod
+    def direction_to_quaternion(direction):
+        """
+        Converts a unit direction vector into a quaternion that represents a rotation
+        from the 'up' direction [0, 0, 1] to the given direction vector.
+        
+        Args:
+            direction (torch.Tensor): A unit direction vector of shape [3], i.e., [vx, vy, vz].
+            
+        Returns:
+            torch.Tensor: A quaternion of shape [4], representing the rotation.
+        """
+        # Ensure the input is a unit vector
+        #if direction.norm() != 1.0:
+        #    raise ValueError("Input direction must be a unit vector.")
+        
+        # Reference direction (the "up" vector)
+        reference_direction = torch.tensor([0.0, 0.0, 1.0], device=direction.device).float()
+        
+        # Compute the axis of rotation: cross product between reference and direction
+        axis_of_rotation = torch.cross(reference_direction.float(), direction.float(), dim=0)
+        
+        # Compute the angle between the vectors: dot product
+        dot_product = torch.dot(reference_direction.float(), direction.float())
+        angle = torch.acos(dot_product)
+        
+        # If the direction is already aligned with reference (i.e., dot_product is 1), no rotation is needed
+        if torch.abs(dot_product - 1.0) < 1e-6:
+            return torch.tensor([1.0, 0.0, 0.0, 0.0], device=direction.device)  # No rotation
+        
+        # Normalize the axis of rotation
+        axis_of_rotation = axis_of_rotation / axis_of_rotation.norm()
+        
+        # Create the quaternion
+        half_angle = angle / 2.0
+        sin_half_angle = torch.sin(half_angle)
+        cos_half_angle = torch.cos(half_angle)
+        
+        quaternion = torch.cat([cos_half_angle.unsqueeze(0), axis_of_rotation * sin_half_angle])
+        
+        return quaternion
+
     def cost_scaling_very_front_heavy(self, cost):
         batch_size = cost.shape[0]
         size = cost.shape[1]
@@ -75,7 +117,34 @@ class RayCost(CostBase):
 
         return cost #This is just the dist to the closest ray point
 
-    def closest_point_on_the_ray_not_used(self, camera_pos_batch, origin, rays):
+    @staticmethod
+    def closest_point_on_the_ray(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
+        #calculate ray from origin to pose_camera_current
+        pose_camera_current = pose_camera_current.unsqueeze(0)
+        print("pose_camera_current.shape", pose_camera_current.shape)
+        origin = origin.unsqueeze(0)
+        print(origin.shape)
+        v = pose_camera_current - origin #[1, 3]
+        print(v.shape)
+        #v dot product with rays unit vectors
+        t = torch.sum(v * rays, dim=-1).unsqueeze(-1) #[rays, 1]
+        print(t.shape)
+        #Find these closest points on each ray
+        print((t * rays).shape)
+        points_closest = origin + (t * rays) #[rays, 3]
+        print(points_closest.shape)
+        #Calculate distance from the pose_camera_current
+        dist = torch.pow(pose_camera_current - points_closest, 2).sum(dim=-1) #[rays]
+        print(torch.pow(pose_camera_current - points_closest, 2).shape)
+        print(dist.shape)
+        min_values, min_indices = torch.min(dist, dim=0)
+        closest_point = points_closest[min_indices, :]
+        closest_ray = rays[min_indices, :]
+        closest_rotation = RayCost.direction_to_quaternion(closest_ray)
+        return closest_point, closest_rotation
+
+    @staticmethod
+    def closest_point_on_the_ray_dep(camera_pos_batch, origin, rays):
         #Calculate the vector of origin to end effector pos
         v = camera_pos_batch - origin.expand_as(camera_pos_batch) #(batch, trajectory, 3) This is origin to camera pos batch as if i do + origin it will point me to camera_pos_batch
         #Dot product of rays with v to get the amount that they line up
@@ -111,17 +180,26 @@ class RayCost(CostBase):
         #cost = 1.0 - torch.dot(normalized_desired_direction, normalized_current_direction) #If they exactly match up, its 1
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
         ori_cost = dot_product
-
-        scale = self.cost_scaling_very_front_heavy(cost)
         #---------------------Orientation^
 
         #Position:
-        pos_cost = self.closest_ray_cost(camera_pos_batch, origin, rays)
+        #print("camera_pos_batch.shape", camera_pos_batch.shape)
+        trajectory_divider = max(camera_pos_batch.shape[1] // 2, 1)
+        #print("trajectory divider", trajectory_divider)
+        front_part_camera_post_batch = camera_pos_batch[:, 0:trajectory_divider, :]
+        pos_cost = self.closest_ray_cost(front_part_camera_post_batch, origin, rays) #(batch, trajectory)
+        #slack = torch.zeros(size=[camera_pos_batch.shape[0], camera_pos_batch.shape[1] - trajectory_divider]).to('cuda')
+        slack = camera_pos_batch[:, :, 0] * 0.0 #(batch, trajectory) all zeros
+        #print("slack shape", slack.shape)
+        slack = slack[:, trajectory_divider:]
+        #print("slack shape 2", slack.shape)
+        pos_cost = torch.cat([pos_cost, slack], dim=1) #(batch, trajectory/2) cat (batch, trajectory/2)
         #
 
         cost = ori_cost + pos_cost
+        scale = self.cost_scaling_very_front_heavy(cost)
 
-        return cost * scale
+        return (cost * scale).float()
 
 def quaternion_to_direction(quaternions):
     """
