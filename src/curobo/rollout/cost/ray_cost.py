@@ -66,11 +66,12 @@ class RayCost(CostBase):
         origin = self.origin
         rays = self.rays
 
-        #---------------------Orientation:
-        obj_center = origin.expand_as(camera_pos_batch)
+        # Orientation component
+        # Penalize camera for not look at object
+        origin_2d_tensor = origin.expand_as(camera_pos_batch)
 
         #Desired direction vectors
-        direction_vector_batch = obj_center - camera_pos_batch
+        direction_vector_batch = origin_2d_tensor - camera_pos_batch
         normalized_desired_direction = F.normalize(direction_vector_batch, p=2, dim=-1)
 
         #Current vector
@@ -81,13 +82,18 @@ class RayCost(CostBase):
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
         ori_cost = dot_product
 
-        #---------------------Orientation^
+        # Orientation^
 
-        #Position:
-        pos_cost = self.closest_ray_cost(camera_pos_batch, origin, rays)
-        #
+        # Ray component
+        # Penalize when camera is not on the ray (mathematically speaking)
+        ray_cost = self.closest_ray_cost(camera_pos_batch, origin, rays)
+        
+        # Origin component
+        # Penalize camera when ray is far from ray origin (resulting in a worse view of the object
+        origin_cost = torch.norm(camera_pos_batch - origin_2d_tensor, dim=-1)
 
-        cost = ori_cost + pos_cost
+        # Combine costs
+        cost = ori_cost + ray_cost + origin_cost
 
         scale = self.cost_scaling_very_front_heavy(cost)
 
