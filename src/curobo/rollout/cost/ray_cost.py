@@ -120,6 +120,7 @@ class RayCost(CostBase):
 
         return cost #This is just the dist to the closest ray point
 
+    #This one just randomly chooses one of the closest points
     @staticmethod
     def closest_point_on_the_ray(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
         #calculate ray from origin to pose_camera_current
@@ -134,7 +135,7 @@ class RayCost(CostBase):
         #print(t.shape)
         #Find these closest points on each ray
         #print((t * rays).shape)
-        t = torch.clamp(t, min=0.1, max=0.7)
+        t = torch.clamp(t, min=0.0, max=0.9)
         points_closest = origin + (t * rays) #[rays, 3]
         #print(points_closest.shape)
         #Calculate distance from the pose_camera_current
@@ -143,10 +144,11 @@ class RayCost(CostBase):
         #print(dist.shape)
         min_values, min_indices = torch.min(dist, dim=0)
         closest_point = points_closest[min_indices, :]
-        min_indices = torch.randint(low=0, high=rays.shape[0]-1)
-        closest_ray = rays[min_indices, :]
-        closest_rotation = RayCost.direction_to_quaternion(closest_ray)
-        return closest_ray, closest_rotation
+        min_indices = torch.randint(low=0, high=rays.shape[0]-1, size=(1,))
+        closest_ray = rays[min_indices, :].squeeze()
+        #closest_rotation = RayCost.direction_to_quaternion(closest_ray)
+        print(closest_ray.shape)
+        return closest_ray, None#closest_rotation
 
     @staticmethod
     def closest_point_on_the_ray_old(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
@@ -218,7 +220,7 @@ class RayCost(CostBase):
         #cost = 1.0 - torch.dot(normalized_desired_direction, normalized_current_direction) #If they exactly match up, its 1
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
         ori_cost = dot_product
-        ori_scale = self.cost_scaling_very_front_heavy(ori_cost, 10000, 20)
+        ori_scale = self.cost_scaling_very_front_heavy(ori_cost, 30000, 20)
         ori_cost = ori_cost * ori_scale
         #---------------------Orientation^
 
