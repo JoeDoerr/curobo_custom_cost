@@ -199,7 +199,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         self.cost_cfg.straight_line_cfg = CostConfig(weight=5.0, vec_weight=1.0, tensor_args=self.tensor_args)
         if self.cost_cfg.straight_line_cfg is not None:
             self.straight_line_cost = StraightLineCost(self.cost_cfg.straight_line_cfg)
-            self.straight_line_cost.enable_cost()
+            #self.straight_line_cost.enable_cost()
         if self.cost_cfg.zero_vel_cfg is not None:
             self.zero_vel_cost = ZeroCost(self.cost_cfg.zero_vel_cfg)
             self._max_vel = self.state_bounds["velocity"][1]
@@ -263,8 +263,8 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             cost_list = super(ArmReacher, self).cost_fn(state, action_batch, return_list=True)
         #print(cost_list[0].detach().cpu().mean(),cost_list[1].detach().cpu().mean())
         ee_pos_batch, ee_quat_batch = state.ee_pos_seq, state.ee_quat_seq
-        camera_pos_batch = state.link_pos_seq[:, :, 1, :] #Make sure that in link poses it is just camera_arm_link and this will make the links it cares about the ee, and camera_arm_link
-        camera_quat_batch = state.link_quat_seq[:, :, 1, :]
+        camera_pos_batch = state.link_pos_seq[:, :, 0, :] #Make sure that in link poses it is just camera_arm_link and this will make the links it cares about the ee, and camera_arm_link
+        camera_quat_batch = state.link_quat_seq[:, :, 0, :]
         #print("camera_pos and quat shape", camera_pos_batch.shape, camera_quat_batch.shape)
         g_dist = None
         with profiler.record_function("cost/pose"):
@@ -392,8 +392,8 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         #print(type(cost), len(cost_list))
         #for cost_value in cost_list:
         #    print(cost_value[0])
-        # if self.custom_camera_cost == True:
-        #     print("first cost value", cost[0])
+        #if self.custom_camera_cost == True:
+        #    print("first cost value", cost[0])
         #print(cost.shape, state_batch.shape)
         return cost
 

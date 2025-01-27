@@ -92,15 +92,15 @@ class RayCost(CostBase):
         
         return quaternion
 
-    def cost_scaling_very_front_heavy(self, cost):
+    def cost_scaling_very_front_heavy(self, cost, start=1000.0, cutoff_time=10):
         batch_size = cost.shape[0]
         size = cost.shape[1]
-        start=1000.0
-        end=-1000.0
+        end=0.0
         step = (end - start) / size
         out = torch.arange(start, end, step, device=torch.device("cuda:0"))
         out = out.unsqueeze(0).repeat(batch_size, 1)
         out[out < 0.0] = 0.0
+        out[:, cutoff_time:] = 0.0
         return out
 
     #origin to camera pose vector cross product each ray then we only want to be attracted to the closest ray so we do the norm then min
@@ -112,8 +112,11 @@ class RayCost(CostBase):
         #e_camera_pos_batch = camera_pos_batch.unsqueeze(1) #(batch, 1, trajectory, 3)
         #Cross product each ray against each v (batch, 1, trajectory, 3) cross (1, rays, 1, 3) = (batch, rays, trajectory, 3)
         cross_product = torch.cross(v.unsqueeze(1), e_rays, dim=-1)
+        #print("cross product size", cross_product.shape)
         dist = torch.norm(cross_product, dim=-1) #batch, rays, trajectory
-        cost, min_indices = torch.min(dist, dim=1) #batch, trajectory
+        #print("dist", dist.shape)
+        #Should have solved the issue when there are no valid rays so rays size is 0, the min will throw an error for doing min on 0 size dim
+        cost, min_indices = torch.min(dist, dim=1) #result batch, trajectory
 
         return cost #This is just the dist to the closest ray point
 
@@ -121,22 +124,51 @@ class RayCost(CostBase):
     def closest_point_on_the_ray(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
         #calculate ray from origin to pose_camera_current
         pose_camera_current = pose_camera_current.unsqueeze(0)
-        print("pose_camera_current.shape", pose_camera_current.shape)
+        #print("pose_camera_current.shape", pose_camera_current.shape)
         origin = origin.unsqueeze(0)
-        print(origin.shape)
+        #print(origin.shape)
         v = pose_camera_current - origin #[1, 3]
-        print(v.shape)
+        #print(v.shape)
         #v dot product with rays unit vectors
         t = torch.sum(v * rays, dim=-1).unsqueeze(-1) #[rays, 1]
-        print(t.shape)
+        #print(t.shape)
         #Find these closest points on each ray
-        print((t * rays).shape)
+        #print((t * rays).shape)
+        t = torch.clamp(t, min=0.1, max=0.7)
         points_closest = origin + (t * rays) #[rays, 3]
-        print(points_closest.shape)
+        #print(points_closest.shape)
         #Calculate distance from the pose_camera_current
         dist = torch.pow(pose_camera_current - points_closest, 2).sum(dim=-1) #[rays]
-        print(torch.pow(pose_camera_current - points_closest, 2).shape)
-        print(dist.shape)
+        #print(torch.pow(pose_camera_current - points_closest, 2).shape)
+        #print(dist.shape)
+        min_values, min_indices = torch.min(dist, dim=0)
+        closest_point = points_closest[min_indices, :]
+        min_indices = torch.randint(low=0, high=rays.shape[0]-1)
+        closest_ray = rays[min_indices, :]
+        closest_rotation = RayCost.direction_to_quaternion(closest_ray)
+        return closest_ray, closest_rotation
+
+    @staticmethod
+    def closest_point_on_the_ray_old(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
+        #calculate ray from origin to pose_camera_current
+        pose_camera_current = pose_camera_current.unsqueeze(0)
+        #print("pose_camera_current.shape", pose_camera_current.shape)
+        origin = origin.unsqueeze(0)
+        #print(origin.shape)
+        v = pose_camera_current - origin #[1, 3]
+        #print(v.shape)
+        #v dot product with rays unit vectors
+        t = torch.sum(v * rays, dim=-1).unsqueeze(-1) #[rays, 1]
+        #print(t.shape)
+        #Find these closest points on each ray
+        #print((t * rays).shape)
+        t = torch.clamp(t, min=0.1, max=0.5)
+        points_closest = origin + (t * rays) #[rays, 3]
+        #print(points_closest.shape)
+        #Calculate distance from the pose_camera_current
+        dist = torch.pow(pose_camera_current - points_closest, 2).sum(dim=-1) #[rays]
+        #print(torch.pow(pose_camera_current - points_closest, 2).shape)
+        #print(dist.shape)
         min_values, min_indices = torch.min(dist, dim=0)
         closest_point = points_closest[min_indices, :]
         closest_ray = rays[min_indices, :]
@@ -175,11 +207,19 @@ class RayCost(CostBase):
 
         #Current vector
         normalized_current_direction = quaternion_to_direction(camera_rot_batch)
+        #print("normalized current direction", normalized_current_direction)
+        #print("camera_rot_batch", camera_rot_batch[0][0], camera_rot_batch[0][-1])
+        #print("obj_center", obj_center[0][-1])
+        # rospy.set_param("/start_ee_pos", camera_pos_batch[0, 0, :].tolist())
+        # rospy.set_param("/cur_dir", normalized_current_direction[0, 0, :].tolist())
+        # rospy.set_param("/des_dir", normalized_desired_direction[0, 0, :].tolist())
 
         #1 - desired vector dot product current vector 
         #cost = 1.0 - torch.dot(normalized_desired_direction, normalized_current_direction) #If they exactly match up, its 1
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
         ori_cost = dot_product
+        ori_scale = self.cost_scaling_very_front_heavy(ori_cost, 10000, 20)
+        ori_cost = ori_cost * ori_scale
         #---------------------Orientation^
 
         #Position:
@@ -194,12 +234,13 @@ class RayCost(CostBase):
         slack = slack[:, trajectory_divider:]
         #print("slack shape 2", slack.shape)
         pos_cost = torch.cat([pos_cost, slack], dim=1) #(batch, trajectory/2) cat (batch, trajectory/2)
+        pos_scale = self.cost_scaling_very_front_heavy(pos_cost, 2000, 20)
+        pos_cost = pos_cost * pos_scale
         #
+        
+        final_cost = ori_cost + pos_cost
 
-        cost = ori_cost + pos_cost
-        scale = self.cost_scaling_very_front_heavy(cost)
-
-        return (cost * scale).float()
+        return final_cost.float()
 
 def quaternion_to_direction(quaternions):
     """

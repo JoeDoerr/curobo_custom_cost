@@ -3276,9 +3276,9 @@ class MotionGen(MotionGenConfig):
         return best_result
 
     def rospy_communication_custom(self):
-        lookat_pos = rospy.get_param("/camera_lookat_position", [0.0,0.0,0.0])
-        self.trajopt_solver.solver.optimizers[0].rollout_fn.camera_cost.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0) #[1, 1, 3]
-        self.trajopt_solver.solver.optimizers[1].rollout_fn.camera_cost.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0) #[1, 1, 3]
+        # lookat_pos = rospy.get_param("/camera_lookat_position", [0.0,0.0,0.0])
+        # self.trajopt_solver.solver.optimizers[0].rollout_fn.camera_cost.obj_center.copy_(torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0)) #[1, 1, 3]
+        # self.trajopt_solver.solver.optimizers[1].rollout_fn.camera_cost.obj_center.copy_(torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0)) #[1, 1, 3]
         #print("updated obj_center", self.trajopt_solver.optimizers[0].rollout_fn.camera_cost.obj_center)
 
         #Get ray normalized direction vectors and the origin of the rays
@@ -3295,13 +3295,23 @@ class MotionGen(MotionGenConfig):
         ray_mask_np = ray_mask.cpu().numpy()
         print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
         #rospy.set_param("/ray_masks", ray_mask_np.tolist())
-        rospy.set_param("/rays_collision_free", rays[ray_mask_np].tolist())
+        #The rays always need the same size, so for all the missing rays, set them to look backwards, -1, 0, 0
+        default_value = np.array([1.0, 0.0, 0.0])  #For the ones in collision make them face backwards
+        collision_free_rays = np.full_like(rays, default_value)
+        collision_free_rays[ray_mask_np] = rays[ray_mask_np] #Fill in the correct rays here with the default being backwards rays
+        
+        # if collision_free_rays.shape[0] == 0: #no collision_free rays
+        #     print("no collision free rays available")
+        #     collision_free_rays = np.array([[1.0, 0.0, 0.0]]) #For when there are no valid rays so rays size is 0, the min will throw an error for doing min on 0 size dim
+        rospy.set_param("/rays_collision_free", collision_free_rays.tolist())
         rospy.set_param("/motion_gen_origin", rays_origin.tolist()) #Do this to ensure we use the matching collision free rays with the origin that the rays had
-        torch_rays = torch.from_numpy(rays[ray_mask_np]).to('cuda')
-        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin).to('cuda')
-        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.origin = torch.from_numpy(rays_origin).to('cuda')
-        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.rays = torch_rays.to('cuda')
-        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.rays = torch_rays.to('cuda')
+        torch_rays = torch.from_numpy(collision_free_rays).to('cuda')
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin.copy_(torch.from_numpy(rays_origin).to('cuda')) #Need to use the .copy_() function not = cuda graph no set new var
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.origin.copy_(torch.from_numpy(rays_origin).to('cuda'))
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.rays.copy_(torch_rays.to('cuda'))
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.rays.copy_(torch_rays.to('cuda'))
+        print("origin", self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin)
+        #print("SET VALUES -----------------------------------------------------------------------------------------------------------")
 
     def _plan_from_solve_state(
         self,
