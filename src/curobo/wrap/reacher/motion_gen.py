@@ -3333,7 +3333,7 @@ class MotionGen(MotionGenConfig):
         Returns:
             MotionGenResult: Result of planning.
         """
-        print_things = True
+        print_things = False
         log_file_path = os.path.expanduser("~/trace_curobo_logs.txt")
         trajopt_seed_traj = None
         trajopt_seed_success = None
@@ -3384,9 +3384,11 @@ class MotionGen(MotionGenConfig):
         if not plan_config.enable_graph and plan_config.partial_ik_opt:
             ik_result.success[:] = True
 
+        ik_success = torch.count_nonzero(ik_result.success)
+
         # check for success:
         result = MotionGenResult(
-            ik_result.success.view(-1)[0:1],  # This is not true for batch mode
+            torch.Tensor([ik_success]), 
             ik_time=ik_result.solve_time,
             solve_time=ik_result.solve_time,
         )
@@ -3398,7 +3400,6 @@ class MotionGen(MotionGenConfig):
 
         if self.store_debug_in_result:
             result.debug_info = {"ik_result": ik_result}
-        ik_success = torch.count_nonzero(ik_result.success)
         if ik_success == 0:
             result.status = MotionGenStatus.IK_FAIL
             #traceback.print_stack()

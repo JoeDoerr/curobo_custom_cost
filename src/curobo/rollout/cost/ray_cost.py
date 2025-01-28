@@ -53,7 +53,7 @@ class RayCost(CostBase):
     @staticmethod
     def direction_to_quaternion(direction):
         """
-        Converts a unit direction vector into a quaternion that represents a rotation
+        Converts a unit direction vector into a quaternion (w, x, y, z) that represents a rotation
         from the 'up' direction [0, 0, 1] to the given direction vector.
         
         Args:
@@ -119,10 +119,9 @@ class RayCost(CostBase):
         cost, min_indices = torch.min(dist, dim=1) #result batch, trajectory
 
         return cost #This is just the dist to the closest ray point
-
-    #This one just randomly chooses one of the closest points
+    
     @staticmethod
-    def closest_point_on_the_ray(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
+    def camera_distance_to_rays(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
         #calculate ray from origin to pose_camera_current
         pose_camera_current = pose_camera_current.unsqueeze(0)
         #print("pose_camera_current.shape", pose_camera_current.shape)
@@ -140,10 +139,18 @@ class RayCost(CostBase):
         #print(points_closest.shape)
         #Calculate distance from the pose_camera_current
         dist = torch.pow(pose_camera_current - points_closest, 2).sum(dim=-1) #[rays]
+
+        return points_closest, dist
+
+    #This one just randomly chooses one of the closest points
+    @staticmethod
+    def closest_point_on_the_ray(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
+        points_closest, dist = RayCost.camera_distance_to_rays(pose_camera_current, origin, rays)
+
         #print(torch.pow(pose_camera_current - points_closest, 2).shape)
         #print(dist.shape)
-        min_values, min_indices = torch.min(dist, dim=0)
-        closest_point = points_closest[min_indices, :]
+        # min_values, min_indices = torch.min(dist, dim=0)
+        # closest_point = points_closest[min_indices, :]
         min_indices = torch.randint(low=0, high=rays.shape[0]-1, size=(1,))
         closest_ray = rays[min_indices, :].squeeze()
         #closest_rotation = RayCost.direction_to_quaternion(closest_ray)

@@ -175,7 +175,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         self._compute_g_dist = False
         self._n_goalset = 1
         #Custom:
-        self.custom_camera_cost = True
+        self.custom_camera_cost = False
         self.custom_ray_cost = True
 
         if self.cost_cfg.cspace_cfg is not None:
@@ -217,7 +217,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             if self.zero_jerk_cost.hinge_value is not None:
                 self._compute_g_dist = True
 
-        self.camera_cost = CameraCost()
+        # self.camera_cost = CameraCost()
         self.ray_cost = RayCost()
 
         self.z_tensor = torch.tensor(
