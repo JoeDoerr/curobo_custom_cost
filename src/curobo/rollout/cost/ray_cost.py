@@ -16,7 +16,7 @@ class RayCost(CostBase):
         self.tensor_args = TensorDeviceType()
         self.ref_vec = torch.tensor([1, 0, 0], device=torch.device("cuda:0"))
         self.origin = torch.zeros((1, 3), device=torch.device("cuda:0"))
-        self.rays = torch.zeros((36, 3), device=torch.device("cuda:0"))
+        self.rays = torch.zeros((30, 3), device=torch.device("cuda:0"))
         CostBase.__init__(self, config)
 
     def look_at_obj_quaternion(self, camera_pos_batch, obj_center):
@@ -103,6 +103,15 @@ class RayCost(CostBase):
         out[:, cutoff_time:] = 0.0
         return out
 
+    def cost_scaling(self, cost, start=100.0, end=1000.0):
+        batch_size = cost.shape[0]
+        size = cost.shape[1]
+        step = (end - start) / size
+        out = torch.arange(start, end, step, device=torch.device("cuda:0"))
+        out = out.unsqueeze(0).repeat(batch_size, 1)
+        out[out < 0.0] = 0.0
+        return out
+
     #origin to camera pose vector cross product each ray then we only want to be attracted to the closest ray so we do the norm then min
     def closest_ray_cost(self, camera_pos_batch, origin, rays):
         #Calculate the vector of origin to end effector pos
@@ -122,7 +131,7 @@ class RayCost(CostBase):
 
     #This one just randomly chooses one of the closest points
     @staticmethod
-    def closest_point_on_the_ray(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
+    def closest_point_on_the_ray_old(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
         #calculate ray from origin to pose_camera_current
         pose_camera_current = pose_camera_current.unsqueeze(0)
         #print("pose_camera_current.shape", pose_camera_current.shape)
@@ -151,7 +160,7 @@ class RayCost(CostBase):
         return closest_ray, None#closest_rotation
 
     @staticmethod
-    def closest_point_on_the_ray_old(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
+    def closest_point_on_the_ray(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
         #calculate ray from origin to pose_camera_current
         pose_camera_current = pose_camera_current.unsqueeze(0)
         #print("pose_camera_current.shape", pose_camera_current.shape)
@@ -174,7 +183,7 @@ class RayCost(CostBase):
         min_values, min_indices = torch.min(dist, dim=0)
         closest_point = points_closest[min_indices, :]
         closest_ray = rays[min_indices, :]
-        closest_rotation = RayCost.direction_to_quaternion(closest_ray)
+        closest_rotation = RayCost.direction_to_quaternion(closest_ray * -1.0)
         return closest_point, closest_rotation
 
     @staticmethod
@@ -219,30 +228,65 @@ class RayCost(CostBase):
         #1 - desired vector dot product current vector 
         #cost = 1.0 - torch.dot(normalized_desired_direction, normalized_current_direction) #If they exactly match up, its 1
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
-        ori_cost = dot_product
-        ori_scale = self.cost_scaling_very_front_heavy(ori_cost, 30000, 20)
-        ori_cost = ori_cost * ori_scale
+        ori_cost = dot_product / 2.0
+        ori_scale = self.cost_scaling_very_front_heavy(ori_cost, 20000, 20)
+        ori_cost = ori_cost # * ori_scale
         #---------------------Orientation^
 
         #Position:
         #print("camera_pos_batch.shape", camera_pos_batch.shape)
-        trajectory_divider = max(camera_pos_batch.shape[1] // 2, 1)
-        #print("trajectory divider", trajectory_divider)
-        front_part_camera_post_batch = camera_pos_batch[:, 0:trajectory_divider, :]
-        pos_cost = self.closest_ray_cost(front_part_camera_post_batch, origin, rays) #(batch, trajectory)
-        #slack = torch.zeros(size=[camera_pos_batch.shape[0], camera_pos_batch.shape[1] - trajectory_divider]).to('cuda')
-        slack = camera_pos_batch[:, :, 0] * 0.0 #(batch, trajectory) all zeros
-        #print("slack shape", slack.shape)
-        slack = slack[:, trajectory_divider:]
-        #print("slack shape 2", slack.shape)
-        pos_cost = torch.cat([pos_cost, slack], dim=1) #(batch, trajectory/2) cat (batch, trajectory/2)
+        # trajectory_divider = max(camera_pos_batch.shape[1] // 2, 1)
+        # #print("trajectory divider", trajectory_divider)
+        # front_part_camera_post_batch = camera_pos_batch[:, 0:trajectory_divider, :]
+        # pos_cost = self.closest_ray_cost(front_part_camera_post_batch, origin, rays) #(batch, trajectory)
+        # #slack = torch.zeros(size=[camera_pos_batch.shape[0], camera_pos_batch.shape[1] - trajectory_divider]).to('cuda')
+        # slack = camera_pos_batch[:, :, 0] * 0.0 #(batch, trajectory) all zeros
+        # #print("slack shape", slack.shape)
+        # slack = slack[:, trajectory_divider:]
+        # #print("slack shape 2", slack.shape)
+        # pos_cost = torch.cat([pos_cost, slack], dim=1) #(batch, trajectory/2) cat (batch, trajectory/2)
+        pos_cost = self.closest_ray_cost(camera_pos_batch, origin, rays)
         pos_scale = self.cost_scaling_very_front_heavy(pos_cost, 2000, 20)
-        pos_cost = pos_cost * pos_scale
+        pos_cost = pos_cost # * pos_scale
         #
-        
-        final_cost = ori_cost + pos_cost
 
-        return final_cost.float()
+        """
+        Notes:
+        Flat scaling makes it much smoother than earlier scaling
+        I see an issue of moving towards only the nearest ray which doesn't even give the best view information.
+        I also see that the centerpoint of the rays do not give the best place to actually look in terms of efficiency to look at occluded space from the current position.
+        Those rays might make sense as full goals, but small adjustments on the trajectory are not helped by those rays at all. 
+        Lets try for small adjustments for occluded volume closest to the end effector. 
+        If all rays are in collision I do backwards rays but the cost to be close to the rays is high and that stops the progress entirely as it tries to get to the z.
+
+        Ok so there is something to say about the rays being too far so not helpful on the way to the grasp and wanting something closer for small optimizations
+        It seems that when we go for a grasp we will already have looked at the easy nearby rays and the ray cost will be more of just a hindrance on the grasping trajectory
+        There is something to say about the closest ray maybe not being the most useful ray to go to while there is a large viewpoint of many good rays elsewhere
+        I am also seeing not full commital where it gets closer which doesn't actually do anything, so it needs to be full commital as much higher reward or something. 
+
+        I ran many experiments with the new cost function and without an auxiliary cost function:
+        The costs are working correctly, I tried just position and that was clearly going to the closest ray and I tried just orientation and that worked too.
+        I have the max of pos and rot scaled by a higher number and the min of pos and rot scaled by a lower number that is /10 of the higher number
+        Flat scaling is much less jerky.
+        There is a bit of randomness with the occlusion volume and that changes the trajectory taken across identical runs. 
+        Here are some pictures of the resulting occlusion volume after getting to the grasp pose with no cost and with auxiliary cost.
+        The auxiliary cost is consistently getting better visibility.
+        """
+
+        #Now put pos_cost between 0 and 1 where it is the distance, so pos_cost / max_distance where I will say like 5 is good
+        max_dist = 3.0
+        #final_cost = (ori_cost * 5000) + (pos_cost * 5000 / max_dist)
+        flat = True
+        large_scale = 20000
+        small_scale = 2000
+        if flat == False:
+            large_scale = self.cost_scaling(ori_cost, start=1000.0, end=20000.0)
+            small_scale = self.cost_scaling(ori_cost, start=100.0, end=2000.0)
+        important_cost = large_scale * torch.maximum(ori_cost, pos_cost / max_dist) #[batch, trajectory], [batch, trajectory]
+        less_important_cost = small_scale * torch.minimum(ori_cost, pos_cost / max_dist)
+        final_cost = important_cost + less_important_cost
+
+        return final_cost.float() * 0.7
 
 def quaternion_to_direction(quaternions):
     """

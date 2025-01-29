@@ -3282,17 +3282,20 @@ class MotionGen(MotionGenConfig):
         #print("updated obj_center", self.trajopt_solver.optimizers[0].rollout_fn.camera_cost.obj_center)
 
         #Get ray normalized direction vectors and the origin of the rays
-        default = np.zeros((36, 3)).tolist()
+        default = np.zeros((30, 3)).tolist()
         rays = rospy.get_param("/rays_from_perception", default) #list
         rays = np.asarray(rays)
         rays_origin = rospy.get_param("/rays_origin_from_perception", [0.0,0.0,0.0])
         rays_origin = np.asarray(rays_origin)
 
         #x1 = [3], x2_batch = [num_rays, 3], length=1, spheres=64, r=.01
-        length = 0.9
-        ray_endpoints = (length * rays) + np.expand_dims(rays_origin, axis=0) #rays=[rays, 3], rays_origin after expand=[1, 3]
-        ray_mask = self.rays_collision_checker.raytrace_batch(rays_origin, ray_endpoints, length=length, spheres=64, r=0.01)
-        ray_mask_np = ray_mask.cpu().numpy()
+        ray_endpoints = rospy.get_param("/rays_endpoints_from_perception", default)
+        ray_endpoints = np.asarray(ray_endpoints)
+        #length = 0.9
+        #ray_endpoints = (length * rays) + np.expand_dims(rays_origin, axis=0) #rays=[rays, 3], rays_origin after expand=[1, 3]
+        ray_mask, largest_cone_ray, ray_cone_sizes, largest_cone_ind = self.rays_collision_checker.raytrace_batch(rays_origin, ray_endpoints, spheres=64, r=6.0)
+        #ray_mask_np = ray_mask.cpu().numpy()
+        ray_mask_np = largest_cone_ind.cpu().numpy()
         print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
         #rospy.set_param("/ray_masks", ray_mask_np.tolist())
         #The rays always need the same size, so for all the missing rays, set them to look backwards, -1, 0, 0
@@ -3312,6 +3315,7 @@ class MotionGen(MotionGenConfig):
         self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.rays.copy_(torch_rays.to('cuda'))
         print("origin", self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin)
         #print("SET VALUES -----------------------------------------------------------------------------------------------------------")
+        return largest_cone_ray
 
     def _plan_from_solve_state(
         self,
@@ -3599,7 +3603,7 @@ class MotionGen(MotionGenConfig):
                 # #print("updated obj_center", self.trajopt_solver.optimizers[0].rollout_fn.camera_cost.obj_center)
 
                 # #Run rays here:
-                # default = np.zeros((36, 3)).tolist()
+                # default = np.zeros((30, 3)).tolist()
                 # rays = rospy.get_param("/rays_from_perception", default) #list
                 # rays = np.asarray(rays)
                 # rays_origin = rospy.get_param("/rays_origin_from_perception", [0.0,0.0,0.0])
