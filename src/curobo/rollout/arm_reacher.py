@@ -176,7 +176,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         self._n_goalset = 1
         #Custom:
         self.custom_camera_cost = False
-        self.custom_ray_cost = True
+        self.custom_ray_cost = False
 
         if self.cost_cfg.cspace_cfg is not None:
             self.cost_cfg.cspace_cfg.dof = self.d_action

@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import rospy
 import time
 import torch
+import transformations as tf
 
 """
 Take in the set of non-colliding rays
@@ -18,37 +19,6 @@ class RayCost(CostBase):
         self.origin = torch.zeros((1, 3), device=torch.device("cuda:0"))
         self.rays = torch.zeros((36, 3), device=torch.device("cuda:0"))
         CostBase.__init__(self, config)
-
-    def look_at_obj_quaternion(self, camera_pos_batch, obj_center):
-        #print("camera pos batch shape", camera_pos_batch.shape, obj_center.shape) #[batch, trajectory_points, 3], [1, 1, 3]
-        # Compute "optimal" orientation (points toward object center)
-
-#        obj_center = obj_center.to(camera_pos_batch.device)
-
-        obj_center = self.obj_center
-        obj_center = obj_center.expand_as(camera_pos_batch)
-
-        # Direction vectors
-        direction_vector_batch = obj_center - camera_pos_batch
-        normalized_directions = F.normalize(direction_vector_batch, p=2, dim=-1)
-
-        # Use standard reference vector
-        ref_vec = self.ref_vec.expand_as(normalized_directions)
-
-        # Compute rotation axes
-        axes = torch.linalg.cross(ref_vec.expand_as(normalized_directions).float(), normalized_directions.float())
-        normalized_axes = F.normalize(axes, p=2, dim=-1)
-
-        # Compute rotation angles
-        dot_products = torch.sum(normalized_directions.float() * ref_vec.expand_as(normalized_directions).float(), dim=-1)
-        angles = torch.acos(torch.clamp(dot_products, -1.0, 1.0))
-
-        # Construct quaternions
-        w = torch.cos(angles / 2)
-        xyz = torch.sin(angles / 2).unsqueeze(-1) * normalized_axes
-        quaternions = torch.cat([w.unsqueeze(-1), xyz], dim=-1)
-
-        return quaternions
 
     @staticmethod
     def direction_to_quaternion(direction):
@@ -141,21 +111,31 @@ class RayCost(CostBase):
         dist = torch.pow(pose_camera_current - points_closest, 2).sum(dim=-1) #[rays]
 
         return points_closest, dist
+    
+    @staticmethod
+    def closest_points_on_the_rays(pos_camera_current, origin, rays, flip_rotations=False): #[3], [3], [rays, 3]
+        points_closest, dist = RayCost.camera_distance_to_rays(pos_camera_current, origin, rays)
+
+        if not flip_rotations:
+            ray_rotations = [RayCost.direction_to_quaternion(ray) for ray in rays]
+        else: 
+            ray_rotations = [RayCost.direction_to_quaternion(-ray) for ray in rays]
+        return points_closest, ray_rotations
 
     #This one just randomly chooses one of the closest points
     @staticmethod
-    def closest_point_on_the_ray(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
+    def closest_point_on_the_rays(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
         points_closest, dist = RayCost.camera_distance_to_rays(pose_camera_current, origin, rays)
 
         #print(torch.pow(pose_camera_current - points_closest, 2).shape)
         #print(dist.shape)
         # min_values, min_indices = torch.min(dist, dim=0)
         # closest_point = points_closest[min_indices, :]
-        min_indices = torch.randint(low=0, high=rays.shape[0]-1, size=(1,))
+        # min_indices = torch.randint(low=0, high=rays.shape[0]-1, size=(1,))
         closest_ray = rays[min_indices, :].squeeze()
-        #closest_rotation = RayCost.direction_to_quaternion(closest_ray)
+        closest_rotation = RayCost.direction_to_quaternion(-closest_ray)
         print(closest_ray.shape)
-        return closest_ray, None#closest_rotation
+        return closest_ray, closest_rotation
 
     @staticmethod
     def closest_point_on_the_ray_old(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
@@ -250,6 +230,29 @@ class RayCost(CostBase):
         final_cost = ori_cost + pos_cost
 
         return final_cost.float()
+    
+    @staticmethod
+    def rotate_quaternion_around_z(quat, axis=torch.tensor([0, 0, 1]), theta=None):
+        """Rotate quaternion q around its z-axis by angle theta (radians).
+        Expects quaternions in [w, x, y, z] format"""
+
+        if theta is None:
+            theta = torch.rand(1) * 2 * torch.pi
+
+        mat = tf.quaternion_matrix(quat)
+
+        mat @= RayCost.axis_angle_matrix(axis=axis, angle=theta)
+
+        return torch.tensor(tf.quaternion_from_matrix(mat))
+    
+    @staticmethod
+    def axis_angle_matrix(axis=torch.tensor([0, 0, 1]), angle=None):
+        if angle is None:
+            angle = 2 * torch.pi * torch.random.rand() 
+
+        quat = torch.cat([torch.cos(angle), axis * torch.sin(angle)]).numpy()
+
+        return tf.quaternion_matrix(quat)
 
 def quaternion_to_direction(quaternions):
     """
@@ -280,3 +283,16 @@ def quaternion_to_direction(quaternions):
     directions = directions / torch.norm(directions, dim=-1, keepdim=True)
     
     return directions
+
+def quaternion_multiply(q1, q2):
+    """Multiply two quaternions q1 and q2."""
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    
+    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+    z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+    
+    return torch.tensor([w, x, y, z])
+

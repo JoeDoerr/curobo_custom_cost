@@ -3055,6 +3055,7 @@ class MotionGen(MotionGenConfig):
                 plan_config,
                 link_poses,
             )
+            print("-----------------------------------[KEVIN] result: ", result.success, result.status)
             time_dict["solve_time"] += result.solve_time
             time_dict["ik_time"] += result.ik_time
             time_dict["graph_time"] += result.graph_time
@@ -3385,6 +3386,7 @@ class MotionGen(MotionGenConfig):
             ik_result.success[:] = True
 
         ik_success = torch.count_nonzero(ik_result.success)
+        print("-----------------------------------[KEVIN] ik_result: ", ik_result.success, ik_success)
 
         # check for success:
         result = MotionGenResult(
@@ -3498,7 +3500,7 @@ class MotionGen(MotionGenConfig):
             with open(log_file_path, "a") as trace_log:
                 trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now\n")
             print("[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now")
-        
+        print("-----------------------------------[KEVIN] graph search result: ", result.success)
         # do trajopt::
 
         if plan_config.enable_opt:
@@ -3632,6 +3634,7 @@ class MotionGen(MotionGenConfig):
                 with open(log_file_path, "a") as trace_log:
                     trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- TrajOpt done, fine tuning now\n")
                 print("[JOE] -------------------------------------------------------------------------------------------------- TrajOpt done, fine tuning now")
+            print("-----------------------------------[KEVIN] trajopt result: ", torch.count_nonzero(traj_result.success) > 0)
             # run finetune
             if plan_config.enable_finetune_trajopt and torch.count_nonzero(traj_result.success) > 0:
                 with profiler.record_function("motion_gen/finetune_trajopt"):
@@ -3681,10 +3684,8 @@ class MotionGen(MotionGenConfig):
                 traj_result.solve_time = og_solve_time
                 if self.store_debug_in_result:
                     result.debug_info["finetune_trajopt_result"] = traj_result
-            elif plan_config.enable_finetune_trajopt:
-                traj_result.success = traj_result.success[0:1]
-                # if torch.count_nonzero(result.success) == 0:
-                result.status = MotionGenStatus.TRAJOPT_FAIL
+            elif torch.count_nonzero(traj_result.success) == 0:
+                    result.status = MotionGenStatus.TRAJOPT_FAIL
             result.solve_time += traj_result.solve_time + result.finetune_time
             result.trajopt_time = traj_result.solve_time
             result.trajopt_attempts = 1
