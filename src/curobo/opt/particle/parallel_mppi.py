@@ -380,6 +380,7 @@ class ParallelMPPI(ParticleOptBase, ParallelMPPIConfig):
         with profiler.record_function("mppi/reset_mean"):
             if self.random_mean:
                 mean = self.mean_lib.get_samples([self.n_problems])
+                #print("mean.shape", mean.shape)
                 self.update_init_mean(mean)
             else:
                 self.update_init_mean(self.init_mean)

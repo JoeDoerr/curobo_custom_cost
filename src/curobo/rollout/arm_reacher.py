@@ -260,7 +260,10 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         """
         state_batch = state.state_seq
         with profiler.record_function("cost/base"):
+            #For MPC MPPI from here: Bound cost, collision cost, manipulability cost, self collision cost
+            
             cost_list = super(ArmReacher, self).cost_fn(state, action_batch, return_list=True)
+        #print("len cost list earlier on", len(cost_list))
         #print(cost_list[0].detach().cpu().mean(),cost_list[1].detach().cpu().mean())
         ee_pos_batch, ee_quat_batch = state.ee_pos_seq, state.ee_quat_seq
         camera_pos_batch = state.link_pos_seq[:, :, 0, :] #Make sure that in link poses it is just camera_arm_link and this will make the links it cares about the ee, and camera_arm_link
@@ -287,7 +290,8 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 ArmReacher.custom_print("goal_cost first", goal_cost[0], goal_cost.mean(), goal_cost.shape)
                 ArmReacher.custom_print("goal value", ee_pos_batch[-1, -1, :])
                 ArmReacher.custom_print("desired goal value", self._goal_buffer.goal_pose.position)
-                #if self.custom_camera_cost == False:
+                # if self.custom_camera_cost == True:
+                #     goal_cost = goal_cost * 0.0
                 cost_list.append(goal_cost)
         with profiler.record_function("cost/link_poses"):
             if self._goal_buffer.links_goal_pose is not None and self.cost_cfg.pose_cfg is not None:
@@ -303,7 +307,9 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                             current_quat = current_pose.quaternion
 
                             c = current_fn.forward(current_pos, current_quat, self._goal_buffer, k)
-                            #print("goal_link_cost", c.mean())
+                            ArmReacher.custom_print("goal_link_cost", c.mean())
+                            # if self.custom_camera_cost == True:
+                            #     c = c * 0.0
                             cost_list.append(c)
 
         if (
@@ -317,11 +323,11 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 state_batch.position,
                 self._goal_buffer.batch_goal_state_idx,
             )
-            #print("joint_cost", joint_cost.mean())
+            ArmReacher.custom_print("joint_cost", joint_cost.mean())
             cost_list.append(joint_cost)
         if self.cost_cfg.straight_line_cfg is not None and self.straight_line_cost.enabled:
             st_cost = self.straight_line_cost.forward(ee_pos_batch)
-            #print("straight_line_cost", st_cost.mean())
+            ArmReacher.custom_print("straight_line_cost", st_cost.mean())
             cost_list.append(st_cost)
 
         if (
@@ -333,14 +339,14 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 state_batch.acceleration,
                 g_dist,
             )
-            #print("zero_accel_cost", z_acc.mean())
+            ArmReacher.custom_print("zero_accel_cost", z_acc.mean())
             cost_list.append(z_acc)
         if self.cost_cfg.zero_jerk_cfg is not None and self.zero_jerk_cost.enabled:
             z_jerk = self.zero_jerk_cost.forward(
                 state_batch.jerk,
                 g_dist,
             )
-            #print("zero_jerk_cost", z_jerk.mean())
+            ArmReacher.custom_print("zero_jerk_cost", z_jerk.mean())
             cost_list.append(z_jerk)
 
         if self.cost_cfg.zero_vel_cfg is not None and self.zero_vel_cost.enabled:
@@ -348,7 +354,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 state_batch.velocity,
                 g_dist,
             )
-            #print("zero_vel_cost", z_vel.mean())
+            ArmReacher.custom_print("zero_vel_cost", z_vel.mean())
             cost_list.append(z_vel)
         #print("[JOE] ----------- COST FUN CALL", ee_pos_batch.shape, state_batch.position.shape, self.custom_camera_cost)
         #print(self.custom_camera_cost)
@@ -380,7 +386,10 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             #cost_list.append(dists)
         if self.custom_ray_cost == True:
             output_ray_costs = self.ray_cost.forward(camera_pos_batch, camera_quat_batch)
+            ArmReacher.custom_print("ray costs", output_ray_costs)
             cost_list.append(output_ray_costs)
+
+        ArmReacher.custom_print("cost list length", len(cost_list))
 
         with profiler.record_function("cat_sum"):
             if self.sum_horizon:
@@ -392,8 +401,9 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         #print(type(cost), len(cost_list))
         #for cost_value in cost_list:
         #    print(cost_value[0])
-        #if self.custom_camera_cost == True:
-        #    print("first cost value", cost[0])
+        ArmReacher.custom_print("custom ray cost", self.custom_ray_cost)
+        if self.custom_ray_cost == True:
+           ArmReacher.custom_print("first cost value", cost[0])
         #print(cost.shape, state_batch.shape)
         return cost
 

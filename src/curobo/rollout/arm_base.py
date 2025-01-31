@@ -360,7 +360,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
             with profiler.record_function("cost/self_collision"):
                 coll_cost = self.robot_self_collision_cost.forward(state.robot_spheres)
                 # cost += coll_cost
-                #print("coll_cost", coll_cost.mean())
+                #print("self_coll_cost")
                 cost_list.append(coll_cost)
         if (
             self.cost_cfg.primitive_collision_cfg is not None
@@ -371,7 +371,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
                     state.robot_spheres,
                     env_query_idx=self._goal_buffer.batch_world_idx,
                 )
-                #print("collision_cost", coll_cost.mean())
+                #print("collision_cost")
                 cost_list.append(coll_cost)
         if return_list:
             #print("\n\n\ncost1\n\n\n", cost_list)

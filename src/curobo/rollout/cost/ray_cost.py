@@ -12,11 +12,11 @@ Heavily front-weight this as once we get to the closet ray it will no longer be 
 
 class RayCost(CostBase):
     def __init__(self, config: CostConfig = None):
-        self.weight = torch.tensor(1, device=torch.device("cuda:0"))
+        self.weight = torch.tensor(1.0, device=torch.device("cuda:0"))
         self.tensor_args = TensorDeviceType()
         self.ref_vec = torch.tensor([1, 0, 0], device=torch.device("cuda:0"))
         self.origin = torch.zeros((1, 3), device=torch.device("cuda:0"))
-        self.rays = torch.zeros((30, 3), device=torch.device("cuda:0"))
+        self.rays = torch.zeros((1, 3), device=torch.device("cuda:0"))
         CostBase.__init__(self, config)
 
     def look_at_obj_quaternion(self, camera_pos_batch, obj_center):
@@ -91,6 +91,43 @@ class RayCost(CostBase):
         quaternion = torch.cat([cos_half_angle.unsqueeze(0), axis_of_rotation * sin_half_angle])
         
         return quaternion
+    
+    def direction_to_quaternion_multiple_randomized(directions: torch.Tensor) -> torch.Tensor:
+        """
+        Convert unit direction vectors (N, 3) into quaternions (N, 4),
+        by randomly assigning the missing rotational degree of freedom.
+        
+        :param directions: Tensor of shape (N, 3) representing unit direction vectors.
+        :return: Tensor of shape (N, 4) representing quaternions.
+        """
+        # Ensure the input is a unit vector
+        directions = directions / torch.norm(directions, dim=-1, keepdim=True)
+        
+        # Generate random angles for the missing degree of freedom
+        random_angles = torch.rand(directions.shape[0]) * 2 * torch.pi
+        
+        # Choose an arbitrary reference vector different from the input direction
+        reference = torch.tensor([0.0, 0.0, 1.0], device=directions.device).expand_as(directions)
+        mask = torch.abs(torch.sum(directions * reference, dim=-1)) > 0.99
+        reference[mask] = torch.tensor([1.0, 0.0, 0.0], device=directions.device)
+        
+        # Compute perpendicular vector to form a frame
+        right = torch.cross(reference, directions)
+        right = right / torch.norm(right, dim=-1, keepdim=True)
+        
+        # Compute the second perpendicular vector
+        up = torch.cross(directions, right)
+        
+        # Construct rotation quaternions
+        cos_half_angle = torch.cos(random_angles / 2).unsqueeze(-1)
+        sin_half_angle = torch.sin(random_angles / 2).unsqueeze(-1)
+        
+        x = right[:, 0] * sin_half_angle + up[:, 0] * sin_half_angle
+        y = right[:, 1] * sin_half_angle + up[:, 1] * sin_half_angle
+        z = right[:, 2] * sin_half_angle + up[:, 2] * sin_half_angle
+        w = cos_half_angle.squeeze(-1)
+        
+        return torch.stack([w, x, y, z], dim=-1)
 
     def cost_scaling_very_front_heavy(self, cost, start=1000.0, cutoff_time=10):
         batch_size = cost.shape[0]
@@ -185,6 +222,25 @@ class RayCost(CostBase):
         closest_ray = rays[min_indices, :]
         closest_rotation = RayCost.direction_to_quaternion(closest_ray * -1.0)
         return closest_point, closest_rotation
+    
+    @staticmethod
+    def closest_points_on_the_ray(pose_camera_current, origin, rays): #[3], [3], [rays, 3]
+        #calculate ray from origin to pose_camera_current
+        pose_camera_current = pose_camera_current.unsqueeze(0)
+        #print("pose_camera_current.shape", pose_camera_current.shape)
+        origin = origin.unsqueeze(0)
+        #print(origin.shape)
+        v = pose_camera_current - origin #[1, 3]
+        #print(v.shape)
+        #v dot product with rays unit vectors
+        t = torch.sum(v * rays, dim=-1).unsqueeze(-1) #[rays, 1]
+        #print(t.shape)
+        #Find these closest points on each ray
+        #print((t * rays).shape)
+        #t = torch.clamp(t, min=0.1, max=0.5)
+        points_closest = origin + (t * rays) #[rays, 3]
+        closest_rotations = RayCost.direction_to_quaternion_multiple_randomized(points_closest * -1.0)
+        return points_closest, closest_rotations
 
     @staticmethod
     def closest_point_on_the_ray_dep(camera_pos_batch, origin, rays):
@@ -274,7 +330,7 @@ class RayCost(CostBase):
         """
 
         #Now put pos_cost between 0 and 1 where it is the distance, so pos_cost / max_distance where I will say like 5 is good
-        max_dist = 3.0
+        max_dist = 2.0
         #final_cost = (ori_cost * 5000) + (pos_cost * 5000 / max_dist)
         flat = True
         large_scale = 20000
@@ -286,7 +342,7 @@ class RayCost(CostBase):
         less_important_cost = small_scale * torch.minimum(ori_cost, pos_cost / max_dist)
         final_cost = important_cost + less_important_cost
 
-        return final_cost.float() * 0.7
+        return final_cost.float() * self.weight
 
 def quaternion_to_direction(quaternions):
     """

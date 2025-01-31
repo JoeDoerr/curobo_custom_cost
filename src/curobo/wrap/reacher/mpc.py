@@ -530,7 +530,7 @@ class MpcSolver(MpcSolverConfig):
             result = self._step_once(current_state.clone(), shift_steps, seed_traj)
             if (
                 torch.count_nonzero(torch.isnan(result.action.position)) == 0
-                and torch.count_nonzero(~result.metrics.feasible) == 0
+                #and torch.count_nonzero(~result.metrics.feasible) == 0
             ):
                 converged = True
                 break

@@ -3299,10 +3299,13 @@ class MotionGen(MotionGenConfig):
         print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
         #rospy.set_param("/ray_masks", ray_mask_np.tolist())
         #The rays always need the same size, so for all the missing rays, set them to look backwards, -1, 0, 0
-        default_value = np.array([1.0, 0.0, 0.0])  #For the ones in collision make them face backwards
-        collision_free_rays = np.full_like(rays, default_value)
-        collision_free_rays[ray_mask_np] = rays[ray_mask_np] #Fill in the correct rays here with the default being backwards rays
+
+
+        # default_value = np.array([1.0, 0.0, 0.0])  #For the ones in collision make them face backwards
+        # collision_free_rays = np.full_like(rays, default_value)
+        # collision_free_rays[ray_mask_np] = rays[ray_mask_np] #Fill in the correct rays here with the default being backwards rays
         
+        collision_free_rays = np.expand_dims(rays[ray_mask_np], 0)
         # if collision_free_rays.shape[0] == 0: #no collision_free rays
         #     print("no collision free rays available")
         #     collision_free_rays = np.array([[1.0, 0.0, 0.0]]) #For when there are no valid rays so rays size is 0, the min will throw an error for doing min on 0 size dim
