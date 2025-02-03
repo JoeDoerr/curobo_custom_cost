@@ -3282,7 +3282,8 @@ class MotionGen(MotionGenConfig):
         #print("updated obj_center", self.trajopt_solver.optimizers[0].rollout_fn.camera_cost.obj_center)
 
         #Get ray normalized direction vectors and the origin of the rays
-        default = np.zeros((30, 3)).tolist()
+        size = 12 * 6
+        default = np.zeros((size, 3)).tolist()
         rays = rospy.get_param("/rays_from_perception", default) #list
         rays = np.asarray(rays)
         rays_origin = rospy.get_param("/rays_origin_from_perception", [0.0,0.0,0.0])
