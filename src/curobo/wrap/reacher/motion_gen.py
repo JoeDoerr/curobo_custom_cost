@@ -3358,18 +3358,6 @@ class MotionGen(MotionGenConfig):
             i += 1
             #print(type(opt))
             if i == 2:
-                # print(type(opt.rollout_fn)) #safetyrollout is an arm reacher
-                # for attr_name in dir(opt):
-                #     try:
-                #         # Get the attribute value
-                #         attr_value = getattr(opt, attr_name)
-                #         # Check if it's an instance of a user-defined class (not built-in types)
-                #         if isinstance(attr_value, object) and not callable(attr_value):
-                #             print(f"{attr_name}: {type(attr_value)} (instance of a class)")
-                #     except Exception as e:
-                #         # Handle any potential errors in getattr
-                #         print(f"Could not access attribute {attr_name}: {e}")
-                # print(opt.rollout_fn.custom_camera_cost)
                 opt.rollout_fn.custom_camera_cost = False
                 opt.rollout_fn.custom_ray_cost = False
                 #print(opt.rollout_fn.custom_camera_cost)
@@ -3501,8 +3489,8 @@ class MotionGen(MotionGenConfig):
                 trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now\n")
             print("[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now")
         print("-----------------------------------[KEVIN] graph search result: ", result.success)
+        
         # do trajopt::
-
         if plan_config.enable_opt:
             with profiler.record_function("motion_gen/setup_trajopt_seeds"):
                 self._trajopt_goal_config[:, :ik_success] = goal_config
@@ -3630,6 +3618,8 @@ class MotionGen(MotionGenConfig):
                 self.trajopt_solver.interpolation_type = og_value
             if self.store_debug_in_result:
                 result.debug_info["trajopt_result"] = traj_result
+            if torch.count_nonzero(traj_result.success) == 0:
+                result.status = MotionGenStatus.TRAJOPT_FAIL
             if print_things == True:
                 with open(log_file_path, "a") as trace_log:
                     trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- TrajOpt done, fine tuning now\n")
@@ -3684,8 +3674,10 @@ class MotionGen(MotionGenConfig):
                 traj_result.solve_time = og_solve_time
                 if self.store_debug_in_result:
                     result.debug_info["finetune_trajopt_result"] = traj_result
-            elif torch.count_nonzero(traj_result.success) == 0:
-                    result.status = MotionGenStatus.TRAJOPT_FAIL
+            elif plan_config.enable_finetune_trajopt:
+                traj_result.success = traj_result.success[0:1]
+                # if torch.count_nonzero(result.success) == 0:
+                result.status = MotionGenStatus.TRAJOPT_FAIL
             result.solve_time += traj_result.solve_time + result.finetune_time
             result.trajopt_time = traj_result.solve_time
             result.trajopt_attempts = 1
