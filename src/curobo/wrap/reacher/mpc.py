@@ -218,12 +218,15 @@ class MpcSolverConfig:
             )
             world_coll_checker = create_collision_checker(world_model)
         grad_config_data = None
+
         if use_lbfgs:
-            grad_config_data = load_yaml(join_path(get_task_configs_path(), "gradient_mpc.yml"))
+            grad_config_data = load_yaml(join_path(get_task_configs_path(), "gradient_mpc.yml")) #gradient_mpc.yml
             if step_dt is not None:
                 grad_config_data["model"]["dt_traj_params"]["base_dt"] = step_dt
                 grad_config_data["model"]["dt_traj_params"]["max_dt"] = step_dt
 
+            print("lbfgs grad config model", grad_config_data["model"])
+            print("not lbfgs grad config model", config_data["model"])
             config_data["model"] = grad_config_data["model"]
             if use_cuda_graph is not None:
                 grad_config_data["lbfgs"]["use_cuda_graph"] = use_cuda_graph
@@ -306,7 +309,10 @@ class MpcSolverConfig:
             lbfgs_cfg_dict = LBFGSOptConfig.create_data_dict(
                 grad_config_data["lbfgs"], arm_rollout_grad, tensor_args
             )
-            lbfgs = LBFGSOpt(LBFGSOptConfig(**lbfgs_cfg_dict))
+            lbfgs_config_final = LBFGSOptConfig(**lbfgs_cfg_dict)
+            print("lbfgs_config_final.fix_terminal_action", lbfgs_config_final.fix_terminal_action)
+            lbfgs_config_final.fix_terminal_action = False
+            lbfgs = LBFGSOpt(lbfgs_config_final)
             solvers.append(lbfgs)
 
         mpc_cfg = WrapConfig(
@@ -534,6 +540,7 @@ class MpcSolver(MpcSolverConfig):
             ):
                 converged = True
                 break
+            print("mpc resetting from the main loop")
             self.reset()
         if not converged:
             result.action.copy_(current_state)
@@ -553,6 +560,7 @@ class MpcSolver(MpcSolverConfig):
     def reset(self):
         """Reset the solver."""
         # reset warm start
+        print("MPC Resetting")
         self.solver.reset()
 
     def reset_cuda_graph(self):

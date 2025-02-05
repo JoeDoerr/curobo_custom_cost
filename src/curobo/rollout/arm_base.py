@@ -348,7 +348,8 @@ class ArmBase(RolloutBase, ArmBaseConfig):
                     self._goal_buffer.retract_state,
                     self._goal_buffer.batch_retract_state_idx,
                 )
-                #print("bound_cost", c.mean())
+                #print("retract state", self._goal_buffer.retract_state, self._goal_buffer.batch_retract_state_idx)
+                print("bound_cost", c.mean())
                 cost_list.append(c)
         if self.cost_cfg.manipulability_cfg is not None and self.manipulability_cost.enabled:
             raise NotImplementedError("Manipulability Cost is not implemented")
@@ -360,7 +361,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
             with profiler.record_function("cost/self_collision"):
                 coll_cost = self.robot_self_collision_cost.forward(state.robot_spheres)
                 # cost += coll_cost
-                #print("self_coll_cost")
+                #print("self_coll_cost", coll_cost.mean())
                 cost_list.append(coll_cost)
         if (
             self.cost_cfg.primitive_collision_cfg is not None
@@ -371,7 +372,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
                     state.robot_spheres,
                     env_query_idx=self._goal_buffer.batch_world_idx,
                 )
-                #print("collision_cost")
+                #print("collision_cost", coll_cost.mean())
                 cost_list.append(coll_cost)
         if return_list:
             #print("\n\n\ncost1\n\n\n", cost_list)
@@ -611,10 +612,40 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         # except Exception as e:
         #     print(f"An error occurred: {e}")
         
+        #print("act seq", act_seq.shape)
+        #print("act seq one", act_seq[0])
         with profiler.record_function("robot_model/rollout"):
             state = self.dynamics_model.forward(
                 self.start_state, act_seq, self._goal_buffer.batch_current_state_idx
             )
+        #print("state seq", state.state_seq[0].position) #KinematicModelState
+        #print("act seq", act_seq[0])
+        # print("Changing last step of trajectory to step right before last step") #---------------
+        # joint_state_attributes = ["position", "velocity", "acceleration", "jerk"]
+
+        # for attr in joint_state_attributes:
+        #     tensor = getattr(state.state_seq, attr)
+        #     if isinstance(tensor, torch.Tensor):
+        #         tensor = tensor.contiguous()  # Ensure it's not a problematic view
+        #         updated_tensor = tensor.clone()  # Clone to avoid modifying views in-place
+        #         updated_tensor[:, -1, :] = tensor[:, -2, :].detach()  # Copy values but detach only for the last step
+        #         setattr(state.state_seq, attr, updated_tensor)  # Assign back to state_seq
+
+        # # Modify other tensors in KinematicModelState
+        # seq_attributes = [
+        #     "ee_pos_seq", "ee_quat_seq", "robot_spheres",
+        #     "link_pos_seq", "link_quat_seq", "lin_jac_seq", "ang_jac_seq"
+        # ]
+
+        # for attr in seq_attributes:
+        #     tensor = getattr(state, attr)
+        #     if isinstance(tensor, torch.Tensor):
+        #         tensor = tensor.contiguous()  # Ensure it's not a problematic view
+        #         updated_tensor = tensor.clone()  # Clone to avoid modifying views in-place
+        #         updated_tensor[:, -1, :] = tensor[:, -2, :].detach()  # Copy values but detach only for the last step
+        #         setattr(state, attr, updated_tensor)  # Assign back to state
+        #print("state", state.state_seq[0].position, state.state_seq.shape)
+        #----------------------------------------------------------------------------------------
 
         # try:
         #     print("goal value from rollout_fn then before states", state.state_seq[-1, -1, :], "\n", state.state_seq[-1, -2, :], "\n", state.state_seq[-1, -3, :], "\n", state.state_seq[-1, -4, :], "\n", state.state_seq[-1, -5, :])

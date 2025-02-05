@@ -75,8 +75,10 @@ class WrapBase(WrapConfig):
 
     def optimize(self, act_seq: torch.Tensor, shift_steps: int = 0) -> torch.Tensor:
         for opt in self.optimizers:
-            #print("[JOE] --------------------------------------------------------------------------------------------------------------- Optimizers", type(opt))
+            print("[Wrap Base JOE] --------------------------------------------------------------------------------------------------------------- Optimizers", type(opt))
+            print("act seq", act_seq)
             act_seq = opt.optimize(act_seq, shift_steps)
+        print("act seq", act_seq)
         return act_seq
 
     def get_debug_data(self):

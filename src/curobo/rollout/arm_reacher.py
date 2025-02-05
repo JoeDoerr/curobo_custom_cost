@@ -259,6 +259,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
 
         """
         state_batch = state.state_seq
+        print("trajectory_size", state_batch.position.shape)
         with profiler.record_function("cost/base"):
             #For MPC MPPI from here: Bound cost, collision cost, manipulability cost, self collision cost
             
@@ -386,7 +387,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             #cost_list.append(dists)
         if self.custom_ray_cost == True:
             output_ray_costs = self.ray_cost.forward(camera_pos_batch, camera_quat_batch)
-            ArmReacher.custom_print("ray costs", output_ray_costs)
+            ArmReacher.custom_print("ray costs", output_ray_costs.mean())
             cost_list.append(output_ray_costs)
 
         ArmReacher.custom_print("cost list length", len(cost_list))

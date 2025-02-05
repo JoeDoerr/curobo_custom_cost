@@ -285,7 +285,7 @@ class RayCost(CostBase):
         #cost = 1.0 - torch.dot(normalized_desired_direction, normalized_current_direction) #If they exactly match up, its 1
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
         ori_cost = dot_product / 2.0
-        ori_scale = self.cost_scaling_very_front_heavy(ori_cost, 20000, 20)
+        #ori_scale = self.cost_scaling_very_front_heavy(ori_cost, 20000, 20)
         ori_cost = ori_cost # * ori_scale
         #---------------------Orientation^
 
@@ -302,7 +302,7 @@ class RayCost(CostBase):
         # #print("slack shape 2", slack.shape)
         # pos_cost = torch.cat([pos_cost, slack], dim=1) #(batch, trajectory/2) cat (batch, trajectory/2)
         pos_cost = self.closest_ray_cost(camera_pos_batch, origin, rays)
-        pos_scale = self.cost_scaling_very_front_heavy(pos_cost, 2000, 20)
+        #pos_scale = self.cost_scaling_very_front_heavy(pos_cost, 2000, 20)
         pos_cost = pos_cost # * pos_scale
         #
 
@@ -328,19 +328,25 @@ class RayCost(CostBase):
         Here are some pictures of the resulting occlusion volume after getting to the grasp pose with no cost and with auxiliary cost.
         The auxiliary cost is consistently getting better visibility.
         """
-
+        
         #Now put pos_cost between 0 and 1 where it is the distance, so pos_cost / max_distance where I will say like 5 is good
         max_dist = 2.0
-        #final_cost = (ori_cost * 5000) + (pos_cost * 5000 / max_dist)
-        flat = True
-        large_scale = 20000
-        small_scale = 2000
-        if flat == False:
-            large_scale = self.cost_scaling(ori_cost, start=1000.0, end=20000.0)
-            small_scale = self.cost_scaling(ori_cost, start=100.0, end=2000.0)
-        important_cost = large_scale * torch.maximum(ori_cost, pos_cost / max_dist) #[batch, trajectory], [batch, trajectory]
-        less_important_cost = small_scale * torch.minimum(ori_cost, pos_cost / max_dist)
-        final_cost = important_cost + less_important_cost
+        use_different_scales=False
+        if use_different_scales == True:
+            #final_cost = (ori_cost * 5000) + (pos_cost * 5000 / max_dist)
+            flat = True
+            large_scale = 20000
+            small_scale = 2000
+            if flat == False:
+                large_scale = self.cost_scaling(ori_cost, start=1000.0, end=20000.0)
+                small_scale = self.cost_scaling(ori_cost, start=100.0, end=2000.0)
+            important_cost = large_scale * torch.maximum(ori_cost, pos_cost / max_dist) #[batch, trajectory], [batch, trajectory]
+            less_important_cost = small_scale * torch.minimum(ori_cost, pos_cost / max_dist)
+            final_cost = important_cost + less_important_cost
+        else:
+            pos_cost = pos_cost / max_dist
+            final_cost = ori_cost + pos_cost
+            final_cost *= 20000
 
         return final_cost.float() * self.weight
 

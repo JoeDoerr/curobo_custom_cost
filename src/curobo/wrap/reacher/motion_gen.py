@@ -3282,7 +3282,7 @@ class MotionGen(MotionGenConfig):
         #print("updated obj_center", self.trajopt_solver.optimizers[0].rollout_fn.camera_cost.obj_center)
 
         #Get ray normalized direction vectors and the origin of the rays
-        default = np.zeros((30, 3)).tolist()
+        default = np.zeros((72, 3)).tolist()
         rays = rospy.get_param("/rays_from_perception", default) #list
         rays = np.asarray(rays)
         rays_origin = rospy.get_param("/rays_origin_from_perception", [0.0,0.0,0.0])
@@ -3309,8 +3309,8 @@ class MotionGen(MotionGenConfig):
         # if collision_free_rays.shape[0] == 0: #no collision_free rays
         #     print("no collision free rays available")
         #     collision_free_rays = np.array([[1.0, 0.0, 0.0]]) #For when there are no valid rays so rays size is 0, the min will throw an error for doing min on 0 size dim
-        rospy.set_param("/rays_collision_free", collision_free_rays.tolist())
-        rospy.set_param("/motion_gen_origin", rays_origin.tolist()) #Do this to ensure we use the matching collision free rays with the origin that the rays had
+        #rospy.set_param("/rays_collision_free", collision_free_rays.tolist())
+        #rospy.set_param("/motion_gen_origin", rays_origin.tolist()) #Do this to ensure we use the matching collision free rays with the origin that the rays had
         torch_rays = torch.from_numpy(collision_free_rays).to('cuda')
         self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin.copy_(torch.from_numpy(rays_origin).to('cuda')) #Need to use the .copy_() function not = cuda graph no set new var
         self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.origin.copy_(torch.from_numpy(rays_origin).to('cuda'))

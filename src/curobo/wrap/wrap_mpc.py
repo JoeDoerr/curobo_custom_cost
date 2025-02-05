@@ -43,6 +43,14 @@ class WrapMpc(WrapBase):
             seed = self._init_act_seq
         else:
             seed = seed.detach().clone()
+        start_config = seed[0, 0, :].clone().squeeze() #This is when you set the retract config in the yml as the start pos
+        end_config = start_config.clone()
+        end_config[1] += 0.5 #second joint
+        t_values = torch.linspace(0, 1, steps=seed.shape[1]).view(-1, 1).to('cuda')  #[num_steps, 1]
+        interpolated_configs = (1 - t_values) * start_config + t_values * end_config
+        seed = interpolated_configs.unsqueeze(0).repeat(seed.shape[0], 1, 1) #[1, trajectory, dof]
+        #seed = torch.ones_like(seed) #[batch, trajectory, position] linear interpolation of position from one of these changing one joint
+        print("[WrapMPC] seed", seed.shape)
         metrics = None
 
         start_time = time.time()
