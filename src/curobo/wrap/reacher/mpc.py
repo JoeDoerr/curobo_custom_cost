@@ -808,8 +808,9 @@ class MpcSolver(MpcSolverConfig):
         )
         if update_reference:
             self.solver.update_nproblems(self._solve_state.get_batch_size())
-            self.reset()
-            self.reset_cuda_graph()
+            print("[mpc] update and solve goal buffer reset")
+            #self.reset()
+            #self.reset_cuda_graph()
             self._col = torch.arange(
                 0, goal.batch, device=self.tensor_args.device, dtype=torch.long
             )

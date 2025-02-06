@@ -326,10 +326,29 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             )
             ArmReacher.custom_print("joint_cost", joint_cost.mean())
             cost_list.append(joint_cost)
+        self.scale_up_collision_cost_when_stuck = 1.0
         if self.cost_cfg.straight_line_cfg is not None and self.straight_line_cost.enabled:
             st_cost = self.straight_line_cost.forward(ee_pos_batch)
             ArmReacher.custom_print("straight_line_cost", st_cost.mean())
+            print("straight_line_cost", st_cost.mean(), st_cost.shape) #When we are barely moving straight line cost is 2.8 so maybe in the 0-5 region
             cost_list.append(st_cost)
+            roc = 0.5
+            if st_cost.mean() < 5.0 and self.scale_up_collision_cost_when_stuck < 100.0:
+                print("--------------------------------------------------increasing collision cost!")
+                self.scale_up_collision_cost_when_stuck += roc
+            elif st_cost.mean() >= 5.0 and self.scale_up_collision_cost_when_stuck > (1.0 + roc):
+                self.scale_up_collision_cost_when_stuck -= roc
+
+        #Scale up the collision cost:
+        collision_cost_index = 0
+        if self.bound_cost.enabled:
+            collision_cost_index+=1
+        if self.cost_cfg.stop_cfg is not None and self.stop_cost.enabled:
+            collision_cost_index+=1
+        if self.cost_cfg.self_collision_cfg is not None and self.robot_self_collision_cost.enabled:
+            collision_cost_index+=1
+        #st_cost is [batch, trajectory]
+        cost_list[collision_cost_index] *= self.scale_up_collision_cost_when_stuck
 
         if (
             self.cost_cfg.zero_acc_cfg is not None
