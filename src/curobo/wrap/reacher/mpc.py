@@ -540,7 +540,7 @@ class MpcSolver(MpcSolverConfig):
             ):
                 converged = True
                 break
-            print("mpc resetting from the main loop")
+            #print("mpc resetting from the main loop")
             self.reset()
         if not converged:
             result.action.copy_(current_state)
@@ -560,7 +560,7 @@ class MpcSolver(MpcSolverConfig):
     def reset(self):
         """Reset the solver."""
         # reset warm start
-        print("MPC Resetting")
+        #print("MPC Resetting")
         self.solver.reset()
 
     def reset_cuda_graph(self):
@@ -808,7 +808,7 @@ class MpcSolver(MpcSolverConfig):
         )
         if update_reference:
             self.solver.update_nproblems(self._solve_state.get_batch_size())
-            print("[mpc] update and solve goal buffer reset")
+            #print("[mpc] update and solve goal buffer reset")
             #self.reset()
             #self.reset_cuda_graph()
             self._col = torch.arange(

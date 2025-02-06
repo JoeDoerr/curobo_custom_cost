@@ -349,7 +349,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
                     self._goal_buffer.batch_retract_state_idx,
                 )
                 #print("retract state", self._goal_buffer.retract_state, self._goal_buffer.batch_retract_state_idx)
-                print("bound_cost", c.mean())
+                #print("bound_cost", c.mean())
                 cost_list.append(c)
         if self.cost_cfg.manipulability_cfg is not None and self.manipulability_cost.enabled:
             raise NotImplementedError("Manipulability Cost is not implemented")
