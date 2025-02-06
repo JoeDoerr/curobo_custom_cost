@@ -1063,6 +1063,11 @@ class IKSolver(IKSolverConfig):
             to check if the problem was solved successfully.
         """
         # create goal buffer:
+        try:
+            del link_poses["camera_arm_link"]
+        except:
+            pass
+            # print("no camera arm link in link poses for ik")
         goal_buffer = self._update_goal_buffer(solve_state, goal_pose, retract_config, link_poses)
         coord_position_seed = self.get_seed(
             num_seeds, goal_buffer.goal_pose, use_nn_seed, seed_config

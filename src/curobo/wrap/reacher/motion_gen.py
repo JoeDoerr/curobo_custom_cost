@@ -1588,6 +1588,7 @@ class MotionGen(MotionGenConfig):
         goal_pose: Pose,
         plan_config: MotionGenPlanConfig = MotionGenPlanConfig(),
         link_poses: List[Pose] = None,
+        is_warmup=True,
     ) -> MotionGenResult:
         """Plan a single motion to reach a goal from set of poses, from a start joint state.
 
@@ -1611,6 +1612,12 @@ class MotionGen(MotionGenConfig):
         solve_state = self._get_solve_state(
             ReacherSolveType.GOALSET, plan_config, goal_pose, start_state
         )
+
+        if is_warmup:
+            try:
+                del link_poses["camera_arm_link"]
+            except:
+                pass
 
         result = self._plan_attempts(
             solve_state,
@@ -3294,6 +3301,11 @@ class MotionGen(MotionGenConfig):
         trajopt_seed_success = None
         trajopt_newton_iters = None
         graph_success = 0
+        
+        try:
+            del link_poses["camera_arm_link"]
+        except:
+            pass
 
         if len(start_state.shape) == 1:
             log_error("Joint state should be not a vector (dof) should be (bxdof)")
@@ -3510,6 +3522,9 @@ class MotionGen(MotionGenConfig):
                 self.trajopt_solver.interpolation_type = og_value
             if self.store_debug_in_result:
                 result.debug_info["trajopt_result"] = traj_result
+            if torch.count_nonzero(traj_result.success) == 0:
+                result.status = MotionGenStatus.TRAJOPT_FAIL
+            # print("[KEVIN] traj_result.success: ", torch.count_nonzero(traj_result.success))
             # run finetune
             if plan_config.enable_finetune_trajopt and torch.count_nonzero(traj_result.success) > 0:
                 with profiler.record_function("motion_gen/finetune_trajopt"):
