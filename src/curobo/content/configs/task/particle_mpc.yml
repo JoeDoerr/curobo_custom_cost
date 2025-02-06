@@ -61,14 +61,14 @@ cost:
   #   null_space_weight: [0.00]
 
   primitive_collision_cfg:
-    weight: 10000.0 #100000.0
+    weight: 100000.0 #100000.0
     use_sweep: True
     sweep_steps: 4
     classify: False
     use_sweep_kernel: True
     use_speed_metric: False
     speed_dt: 0.1 # used only for speed metric
-    activation_distance: 0.025 #0.025
+    activation_distance: 0.05 #0.025
 
   self_collision_cfg:
     weight: 50000.0
@@ -95,7 +95,7 @@ mppi:
   cov_type          : "DIAG_A" #
   kappa             : 0.0001
   null_act_frac     : 0.05
-  sample_mode       : 'BEST' #'MEAN' #mean means choosing the mean of the distribution made as the actions to output
+  sample_mode       : 'BEST' #'MEAN' #mean means choosing the mean of the distribution made as the actions to output. Best means choosing the best trajectory costs its seen
   base_action       : 'REPEAT'
   squash_fn         : 'CLAMP'
   n_problems        : 1

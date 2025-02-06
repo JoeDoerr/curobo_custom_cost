@@ -177,6 +177,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         #Custom:
         self.custom_camera_cost = True
         self.custom_ray_cost = True
+        self.scale_up_collision_cost_when_stuck = 1.0
 
         if self.cost_cfg.cspace_cfg is not None:
             self.cost_cfg.cspace_cfg.dof = self.d_action
@@ -326,15 +327,15 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             )
             ArmReacher.custom_print("joint_cost", joint_cost.mean())
             cost_list.append(joint_cost)
-        self.scale_up_collision_cost_when_stuck = 1.0
+        
         if self.cost_cfg.straight_line_cfg is not None and self.straight_line_cost.enabled:
             st_cost = self.straight_line_cost.forward(ee_pos_batch)
             ArmReacher.custom_print("straight_line_cost", st_cost.mean())
             print("straight_line_cost", st_cost.mean(), st_cost.shape) #When we are barely moving straight line cost is 2.8 so maybe in the 0-5 region
             cost_list.append(st_cost)
-            roc = 0.5
-            if st_cost.mean() < 5.0 and self.scale_up_collision_cost_when_stuck < 100.0:
-                print("--------------------------------------------------increasing collision cost!")
+            roc = 100.0
+            if st_cost.mean() < 5.0 and self.scale_up_collision_cost_when_stuck < 5000.0:
+                print("--------------------------------------------------increasing collision cost!", self.scale_up_collision_cost_when_stuck)
                 self.scale_up_collision_cost_when_stuck += roc
             elif st_cost.mean() >= 5.0 and self.scale_up_collision_cost_when_stuck > (1.0 + roc):
                 self.scale_up_collision_cost_when_stuck -= roc

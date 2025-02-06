@@ -346,7 +346,7 @@ class RayCost(CostBase):
         else:
             pos_cost = pos_cost / max_dist
             final_cost = ori_cost + pos_cost
-            final_cost *= 18000
+            final_cost *= 15000 #20000
 
         return final_cost.float() * self.weight
 
