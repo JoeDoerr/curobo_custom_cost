@@ -3340,6 +3340,11 @@ class MotionGen(MotionGenConfig):
         trajopt_seed_success = None
         trajopt_newton_iters = None
         graph_success = 0
+        
+        try:
+            del link_poses["camera_arm_link"]
+        except:
+            pass
 
         if len(start_state.shape) == 1:
             log_error("Joint state should be not a vector (dof) should be (bxdof)")
@@ -3361,6 +3366,12 @@ class MotionGen(MotionGenConfig):
                 opt.rollout_fn.custom_camera_cost = False
                 opt.rollout_fn.custom_ray_cost = False
                 #print(opt.rollout_fn.custom_camera_cost)
+
+        try:
+            del link_poses["camera_arm_link"]
+        except:
+            pass
+        
         ik_result = self._solve_ik_from_solve_state(
             goal_pose,
             solve_state,
