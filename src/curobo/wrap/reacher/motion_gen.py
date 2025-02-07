@@ -48,6 +48,7 @@ import numpy as np
 import torch
 import torch.autograd.profiler as profiler
 import warp as wp
+import os
 
 # CuRobo
 from curobo.cuda_robot_model.cuda_robot_model import CudaRobotModel
@@ -83,6 +84,8 @@ from curobo.wrap.reacher.ik_solver import IKResult, IKSolver, IKSolverConfig
 from curobo.wrap.reacher.trajopt import TrajOptResult, TrajOptSolver, TrajOptSolverConfig
 from curobo.wrap.reacher.types import ReacherSolveState, ReacherSolveType
 
+import traceback
+import rospy
 
 @dataclass
 class MotionGenConfig:
@@ -1453,6 +1456,8 @@ class MotionGen(MotionGenConfig):
         self._pose_rollout_list = None
         self._kin_list = None
         self.update_batch_size(seeds=self.trajopt_seeds)
+        #: Custom kevin rays
+        self.rays_collision_checker = None
 
     def update_batch_size(self, seeds=10, batch=1):
         """Update the batch size for motion generation.
@@ -1588,7 +1593,6 @@ class MotionGen(MotionGenConfig):
         goal_pose: Pose,
         plan_config: MotionGenPlanConfig = MotionGenPlanConfig(),
         link_poses: List[Pose] = None,
-        is_warmup=True,
     ) -> MotionGenResult:
         """Plan a single motion to reach a goal from set of poses, from a start joint state.
 
@@ -1613,11 +1617,10 @@ class MotionGen(MotionGenConfig):
             ReacherSolveType.GOALSET, plan_config, goal_pose, start_state
         )
 
-        if is_warmup:
-            try:
-                del link_poses["camera_arm_link"]
-            except:
-                pass
+        try:
+            del link_poses["camera_arm_link"]
+        except:
+            pass
 
         result = self._plan_attempts(
             solve_state,
@@ -3277,6 +3280,52 @@ class MotionGen(MotionGenConfig):
         best_result.total_time = time.time() - start_time
         return best_result
 
+    def rospy_communication_custom(self):
+        # lookat_pos = rospy.get_param("/camera_lookat_position", [0.0,0.0,0.0])
+        # self.trajopt_solver.solver.optimizers[0].rollout_fn.camera_cost.obj_center.copy_(torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0)) #[1, 1, 3]
+        # self.trajopt_solver.solver.optimizers[1].rollout_fn.camera_cost.obj_center.copy_(torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0)) #[1, 1, 3]
+        #print("updated obj_center", self.trajopt_solver.optimizers[0].rollout_fn.camera_cost.obj_center)
+
+        #Get ray normalized direction vectors and the origin of the rays
+        size = 12 * 6
+        default = np.zeros((size, 3)).tolist()
+        rays = rospy.get_param("/rays_from_perception", default) #list
+        rays = np.asarray(rays)
+        rays_origin = rospy.get_param("/rays_origin_from_perception", [0.0,0.0,0.0])
+        rays_origin = np.asarray(rays_origin)
+
+        #x1 = [3], x2_batch = [num_rays, 3], length=1, spheres=64, r=.01
+        ray_endpoints = rospy.get_param("/rays_endpoints_from_perception", default)
+        ray_endpoints = np.asarray(ray_endpoints)
+        #length = 0.9
+        #ray_endpoints = (length * rays) + np.expand_dims(rays_origin, axis=0) #rays=[rays, 3], rays_origin after expand=[1, 3]
+        ray_mask, largest_cone_ray, ray_cone_sizes, largest_cone_ind = self.rays_collision_checker.raytrace_batch(rays_origin, ray_endpoints, spheres=64, r=6.0)
+        #ray_mask_np = ray_mask.cpu().numpy()
+        ray_mask_np = largest_cone_ind.cpu().numpy()
+        print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
+        #rospy.set_param("/ray_masks", ray_mask_np.tolist())
+        #The rays always need the same size, so for all the missing rays, set them to look backwards, -1, 0, 0
+
+
+        # default_value = np.array([1.0, 0.0, 0.0])  #For the ones in collision make them face backwards
+        # collision_free_rays = np.full_like(rays, default_value)
+        # collision_free_rays[ray_mask_np] = rays[ray_mask_np] #Fill in the correct rays here with the default being backwards rays
+        
+        collision_free_rays = np.expand_dims(rays[ray_mask_np], 0)
+        # if collision_free_rays.shape[0] == 0: #no collision_free rays
+        #     print("no collision free rays available")
+        #     collision_free_rays = np.array([[1.0, 0.0, 0.0]]) #For when there are no valid rays so rays size is 0, the min will throw an error for doing min on 0 size dim
+        #rospy.set_param("/rays_collision_free", collision_free_rays.tolist())
+        #rospy.set_param("/motion_gen_origin", rays_origin.tolist()) #Do this to ensure we use the matching collision free rays with the origin that the rays had
+        torch_rays = torch.from_numpy(collision_free_rays).to('cuda')
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin.copy_(torch.from_numpy(rays_origin).to('cuda')) #Need to use the .copy_() function not = cuda graph no set new var
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.origin.copy_(torch.from_numpy(rays_origin).to('cuda'))
+        self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.rays.copy_(torch_rays.to('cuda'))
+        self.trajopt_solver.solver.optimizers[1].rollout_fn.ray_cost.rays.copy_(torch_rays.to('cuda'))
+        print("origin", self.trajopt_solver.solver.optimizers[0].rollout_fn.ray_cost.origin)
+        #print("SET VALUES -----------------------------------------------------------------------------------------------------------")
+        return largest_cone_ray
+
     def _plan_from_solve_state(
         self,
         solve_state: ReacherSolveState,
@@ -3297,6 +3346,8 @@ class MotionGen(MotionGenConfig):
         Returns:
             MotionGenResult: Result of planning.
         """
+        print_things = True
+        log_file_path = os.path.expanduser("~/trace_curobo_logs.txt")
         trajopt_seed_traj = None
         trajopt_seed_success = None
         trajopt_newton_iters = None
@@ -3316,7 +3367,29 @@ class MotionGen(MotionGenConfig):
                 + str(goal_pose.shape)
             )
         # plan ik:
-
+        #MotionGen.IKSolver.WrapBase.NewtonOptBase=WrapBase
+        #self.ik_solver.solver.optimizers[1].custom_camera_wrap_base
+        #print(type(self.ik_solver), type(self.ik_solver.solver))
+        i = 0
+        for opt in self.ik_solver.solver.optimizers:
+            i += 1
+            #print(type(opt))
+            if i == 2:
+                # print(type(opt.rollout_fn)) #safetyrollout is an arm reacher
+                # for attr_name in dir(opt):
+                #     try:
+                #         # Get the attribute value
+                #         attr_value = getattr(opt, attr_name)
+                #         # Check if it's an instance of a user-defined class (not built-in types)
+                #         if isinstance(attr_value, object) and not callable(attr_value):
+                #             print(f"{attr_name}: {type(attr_value)} (instance of a class)")
+                #     except Exception as e:
+                #         # Handle any potential errors in getattr
+                #         print(f"Could not access attribute {attr_name}: {e}")
+                # print(opt.rollout_fn.custom_camera_cost)
+                opt.rollout_fn.custom_camera_cost = False
+                opt.rollout_fn.custom_ray_cost = False
+                #print(opt.rollout_fn.custom_camera_cost)
         ik_result = self._solve_ik_from_solve_state(
             goal_pose,
             solve_state,
@@ -3336,11 +3409,18 @@ class MotionGen(MotionGenConfig):
             solve_time=ik_result.solve_time,
         )
 
+        if print_things == True:
+            with open(log_file_path, "a") as trace_log:
+                trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- IK finishing, before checking IK results\n")
+            print("[JOE] -------------------------------------------------------------------------------------------------- IK finishing, before checking IK results")
+
         if self.store_debug_in_result:
             result.debug_info = {"ik_result": ik_result}
         ik_success = torch.count_nonzero(ik_result.success)
         if ik_success == 0:
             result.status = MotionGenStatus.IK_FAIL
+            #traceback.print_stack()
+            #raise KeyboardInterrupt()
             return result
 
         # do graph search:
@@ -3431,6 +3511,11 @@ class MotionGen(MotionGenConfig):
                 if plan_config.need_graph_success:
                     return result
 
+        if print_things == True:
+            with open(log_file_path, "a") as trace_log:
+                trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now\n")
+            print("[JOE] -------------------------------------------------------------------------------------------------- Graph search (GEOM PLANNER) is completed now")
+        
         # do trajopt::
 
         if plan_config.enable_opt:
@@ -3509,6 +3594,44 @@ class MotionGen(MotionGenConfig):
                 self.trajopt_solver.interpolation_type = InterpolateType.LINEAR_CUDA
             with profiler.record_function("motion_gen/trajopt"):
                 log_info("MG: running TO")
+                if print_things == True:
+                    with open(log_file_path, "a") as trace_log:
+                        trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- TrajOpt function starting now\n")
+                    print("[JOE] -------------------------------------------------------------------------------------------------- TrajOpt function starting now")
+                # print("self.trajopt_solver", type(self.trajopt_solver.solver)) #TrajOptSolver, trajopt_solver, arm_base, safety_rollout, .camera_cost
+                # print(type(self.trajopt_solver.solver.safety_rollout))
+                # print(type(self.trajopt_solver.solver.optimizers[0]))
+                # print(type(self.trajopt_solver.solver.optimizers[1]))
+                # print(type(self.trajopt_solver.solver.optimizers[0].rollout_fn))
+                # print(type(self.trajopt_solver.solver.optimizers[1].rollout_fn))
+                #print(type(self.trajopt_solver.solver.optimizers[0].rollout_fn.camera_cost))
+                # # Check the type of each attribute
+                # members = [
+                #     name for name, obj in vars(self.trajopt_solver).items()
+                #     if isinstance(type(obj), type)  # Check if the type of the attribute is a class
+                # ]
+                # print("members", members)
+                # lookat_pos = rospy.get_param("/camera_lookat_position", [0.0,0.0,0.0])
+                # self.trajopt_solver.solver.optimizers[0].rollout_fn.camera_cost.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0) #[1, 1, 3]
+                # self.trajopt_solver.solver.optimizers[1].rollout_fn.camera_cost.obj_center = torch.tensor(lookat_pos, device=torch.device("cuda:0")).unsqueeze(0) #[1, 1, 3]
+                # #print("updated obj_center", self.trajopt_solver.optimizers[0].rollout_fn.camera_cost.obj_center)
+
+                # #Run rays here:
+                # default = np.zeros((30, 3)).tolist()
+                # rays = rospy.get_param("/rays_from_perception", default) #list
+                # rays = np.asarray(rays)
+                # rays_origin = rospy.get_param("/rays_origin_from_perception", [0.0,0.0,0.0])
+                # rays_origin = np.asarray(rays_origin)
+                # #x1 = [3], x2_batch = [num_rays, 3], length=1, spheres=64, r=.01
+                # ray_endpoints = rays + np.expand_dims(rays_origin, axis=0) #rays=[rays, 3], rays_origin after expand=[1, 3]
+                # ray_mask = self.rays_collision_checker.raytrace_batch(rays_origin, ray_endpoints, length=1.0, r=0.01)
+                # ray_mask_np = ray_mask.cpu().numpy()
+                # print("ray mask np shape", ray_mask_np.shape, rays[0], rays_origin)
+                # rospy.set_param("/ray_masks", ray_mask_np.tolist())
+                t0 = time.time()
+                self.rospy_communication_custom()
+                print("time communication took", time.time() - t0)
+
                 traj_result = self._solve_trajopt_from_solve_state(
                     goal,
                     solve_state,
@@ -3522,9 +3645,11 @@ class MotionGen(MotionGenConfig):
                 self.trajopt_solver.interpolation_type = og_value
             if self.store_debug_in_result:
                 result.debug_info["trajopt_result"] = traj_result
+
             if torch.count_nonzero(traj_result.success) == 0:
                 result.status = MotionGenStatus.TRAJOPT_FAIL
             # print("[KEVIN] traj_result.success: ", torch.count_nonzero(traj_result.success))
+
             # run finetune
             if plan_config.enable_finetune_trajopt and torch.count_nonzero(traj_result.success) > 0:
                 with profiler.record_function("motion_gen/finetune_trajopt"):
@@ -3603,6 +3728,10 @@ class MotionGen(MotionGenConfig):
             result.optimized_dt = traj_result.optimized_dt
             result.optimized_plan = traj_result.solution
             result.goalset_index = traj_result.goalset_index
+        if print_things == True:
+            with open(log_file_path, "a") as trace_log:
+                trace_log.write(f"[JOE] -------------------------------------------------------------------------------------------------- Returning result\n")
+            print("[JOE] -------------------------------------------------------------------------------------------------- Returning result")
         return result
 
     def _plan_js_from_solve_state(

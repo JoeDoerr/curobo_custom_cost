@@ -50,6 +50,8 @@ class ParticleOptConfig(OptimizerConfig):
         object.__setattr__(self, "action_highs", self.tensor_args.to_device(self.action_highs))
         object.__setattr__(self, "action_lows", self.tensor_args.to_device(self.action_lows))
 
+        #self.use_cuda_graph = False #REMEMBER TO REMOVE THIS THING //////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
         if self.calculate_value and self.use_cuda_graph:
             log_error("Cannot calculate_value when cuda graph is enabled")
         return super().__post_init__()
@@ -175,6 +177,8 @@ class ParticleOptBase(Optimizer, ParticleOptConfig):
         """
 
         act_seq = self.sample_actions(init_act)
+        #print("init act", init_act)
+        #print("act seq shape", act_seq.shape)
         trajectories = self.rollout_fn(act_seq)
         return trajectories
 
@@ -204,7 +208,7 @@ class ParticleOptBase(Optimizer, ParticleOptConfig):
         n_iters = n_iters if n_iters is not None else self.n_iters
 
         # create cuda graph:
-
+        #print("in _optimize(), self.use_cuda_graph", self.use_cuda_graph)
         if self.use_cuda_graph:
             if not self.cu_opt_init:
                 self._initialize_cuda_graph(init_act.clone(), shift_steps=shift_steps)
@@ -251,11 +255,14 @@ class ParticleOptBase(Optimizer, ParticleOptConfig):
     def _run_opt_iters(self, init_act: T_HDOF_float, shift_steps=0, n_iters=None):
         n_iters = n_iters if n_iters is not None else self.n_iters
 
+        #print("in run_opt_iters, init_act and shift steps", init_act, shift_steps)
+
         self._shift(shift_steps)
         self.update_seed(init_act)
         if not self.use_cuda_graph and self.store_debug:
             self.debug.append(self._get_action_seq(mode=self.sample_mode).clone())
 
+        #print("n_iters curobo", n_iters)
         for _ in range(n_iters):
             # generate random simulated trajectories
             trajectory = self.generate_rollouts()
@@ -274,6 +281,8 @@ class ParticleOptBase(Optimizer, ParticleOptConfig):
                 )
 
         curr_action_seq = self._get_action_seq(mode=self.sample_mode)
+        #print(curr_action_seq)
+        #print(curr_action_seq.shape)
         return curr_action_seq
 
     def update_nproblems(self, n_problems):

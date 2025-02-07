@@ -284,6 +284,7 @@ class ParallelMPPI(ParticleOptBase, ParallelMPPIConfig):
     def _update_distribution(self, trajectories: Trajectory):
         costs = trajectories.costs
         actions = trajectories.actions
+        #print("[parallelmppi] actions.shape", actions.shape, "cost shapes", costs.shape) #actions are trajectory-4 and costs are trajectory
 
         # Let's reshape to n_problems now:
 
@@ -380,6 +381,7 @@ class ParallelMPPI(ParticleOptBase, ParallelMPPIConfig):
         with profiler.record_function("mppi/reset_mean"):
             if self.random_mean:
                 mean = self.mean_lib.get_samples([self.n_problems])
+                #print("------------------------------------------------------------------------------------------mean.shape", mean.shape)
                 self.update_init_mean(mean)
             else:
                 self.update_init_mean(self.init_mean)
@@ -401,6 +403,7 @@ class ParallelMPPI(ParticleOptBase, ParallelMPPIConfig):
             elif self.cov_type == CovType.DIAG_A:
                 # init_cov can either be a single value, or n_problems x 1 or n_problems x 7
                 init_cov = self.init_cov.clone()
+                # print("init cov", init_cov)
 
                 # if(init_cov.shape[-1] != self.d_action):
                 if len(init_cov.shape) == 1:

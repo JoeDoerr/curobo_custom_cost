@@ -15,6 +15,8 @@ from typing import Dict, List, Optional
 # Third Party
 import torch
 import torch.autograd.profiler as profiler
+from curobo.rollout.cost.camera_cost import CameraCost
+from curobo.rollout.cost.ray_cost import RayCost
 
 # CuRobo
 from curobo.geom.sdf.world import WorldCollision
@@ -172,6 +174,10 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         # self.goal_ee_quat = None
         self._compute_g_dist = False
         self._n_goalset = 1
+        #Custom:
+        # self.custom_camera_cost = True
+        self.custom_ray_cost = True
+        # self.scale_up_collision_cost_when_stuck = 1.0
 
         if self.cost_cfg.cspace_cfg is not None:
             self.cost_cfg.cspace_cfg.dof = self.d_action
@@ -191,8 +197,10 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             for i in self.kinematics.link_names:
                 if i != self.kinematics.ee_link:
                     self._link_pose_costs[i] = PoseCost(self.cost_cfg.link_pose_cfg)
+        self.cost_cfg.straight_line_cfg = CostConfig(weight=5.0, vec_weight=1.0, tensor_args=self.tensor_args)
         if self.cost_cfg.straight_line_cfg is not None:
             self.straight_line_cost = StraightLineCost(self.cost_cfg.straight_line_cfg)
+            # self.straight_line_cost.enable_cost()
         if self.cost_cfg.zero_vel_cfg is not None:
             self.zero_vel_cost = ZeroCost(self.cost_cfg.zero_vel_cfg)
             self._max_vel = self.state_bounds["velocity"][1]
@@ -209,6 +217,9 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             self._max_vel = self.state_bounds["velocity"][1]
             if self.zero_jerk_cost.hinge_value is not None:
                 self._compute_g_dist = True
+
+        self.camera_cost = CameraCost()
+        self.ray_cost = RayCost()
 
         self.z_tensor = torch.tensor(
             0, device=self.tensor_args.device, dtype=self.tensor_args.dtype
@@ -244,9 +255,17 @@ class ArmReacher(ArmBase, ArmReacherConfig):
 
         """
         state_batch = state.state_seq
+        #print("trajectory_size", state_batch.position.shape)
         with profiler.record_function("cost/base"):
+            #For MPC MPPI from here: Bound cost, collision cost, manipulability cost, self collision cost
+            
             cost_list = super(ArmReacher, self).cost_fn(state, action_batch, return_list=True)
+        #print("len cost list earlier on", len(cost_list))
+        #print(cost_list[0].detach().cpu().mean(),cost_list[1].detach().cpu().mean())
         ee_pos_batch, ee_quat_batch = state.ee_pos_seq, state.ee_quat_seq
+        camera_pos_batch = state.link_pos_seq[:, :, 0, :] #Make sure that in link poses it is just camera_arm_link and this will make the links it cares about the ee, and camera_arm_link
+        camera_quat_batch = state.link_quat_seq[:, :, 0, :]
+        #print("camera_pos and quat shape", camera_pos_batch.shape, camera_quat_batch.shape)
         g_dist = None
         with profiler.record_function("cost/pose"):
             if (
@@ -260,12 +279,16 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                         ee_quat_batch,
                         self._goal_buffer,
                     )
-
                     g_dist = _compute_g_dist_jit(rot_err_norm, goal_dist)
                 else:
                     goal_cost = self.goal_cost.forward(
                         ee_pos_batch, ee_quat_batch, self._goal_buffer
                     )
+                # print("goal_cost first", goal_cost[0], goal_cost.mean(), goal_cost.shape)
+                # print("goal value", ee_pos_batch[-1, -1, :])
+                # print("desired goal value", self._goal_buffer.goal_pose.position)
+                # if self.custom_camera_cost == True:
+                #     goal_cost = goal_cost * 0.0
                 cost_list.append(goal_cost)
         with profiler.record_function("cost/link_poses"):
             if self._goal_buffer.links_goal_pose is not None and self.cost_cfg.pose_cfg is not None:
@@ -281,6 +304,9 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                             current_quat = current_pose.quaternion
 
                             c = current_fn.forward(current_pos, current_quat, self._goal_buffer, k)
+                            # print("goal_link_cost", c.mean())
+                            # if self.custom_camera_cost == True:
+                            #     c = c * 0.0
                             cost_list.append(c)
 
         if (
@@ -288,16 +314,37 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             and self.cost_cfg.cspace_cfg is not None
             and self.dist_cost.enabled
         ):
-
+            #print("[JOE] state batch shape", state_batch.position.shape, type(state_batch))
             joint_cost = self.dist_cost.forward_target_idx(
                 self._goal_buffer.goal_state.position,
                 state_batch.position,
                 self._goal_buffer.batch_goal_state_idx,
             )
+            # print("joint_cost", joint_cost.mean())
             cost_list.append(joint_cost)
+        
         if self.cost_cfg.straight_line_cfg is not None and self.straight_line_cost.enabled:
             st_cost = self.straight_line_cost.forward(ee_pos_batch)
+            # print("straight_line_cost", st_cost.mean())
+            #print("straight_line_cost", st_cost.mean(), st_cost.shape) #When we are barely moving straight line cost is 2.8 so maybe in the 0-5 region
             cost_list.append(st_cost)
+            #roc = 100.0
+            #if st_cost.mean() < 5.0 and self.scale_up_collision_cost_when_stuck < 5000.0:
+            #    #print("--------------------------------------------------increasing collision cost!", self.scale_up_collision_cost_when_stuck)
+            #    self.scale_up_collision_cost_when_stuck += roc
+            #elif st_cost.mean() >= 5.0 and self.scale_up_collision_cost_when_stuck > (1.0 + roc):
+            #    self.scale_up_collision_cost_when_stuck -= roc
+
+        #Scale up the collision cost:
+        #collision_cost_index = 0
+        #if self.bound_cost.enabled:
+        #    collision_cost_index+=1
+        #if self.cost_cfg.stop_cfg is not None and self.stop_cost.enabled:
+        #    collision_cost_index+=1
+        #if self.cost_cfg.self_collision_cfg is not None and self.robot_self_collision_cost.enabled:
+        #    collision_cost_index+=1
+        ##st_cost is [batch, trajectory]
+        #cost_list[collision_cost_index] *= self.scale_up_collision_cost_when_stuck
 
         if (
             self.cost_cfg.zero_acc_cfg is not None
@@ -308,13 +355,14 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 state_batch.acceleration,
                 g_dist,
             )
-
+            # print("zero_accel_cost", z_acc.mean())
             cost_list.append(z_acc)
         if self.cost_cfg.zero_jerk_cfg is not None and self.zero_jerk_cost.enabled:
             z_jerk = self.zero_jerk_cost.forward(
                 state_batch.jerk,
                 g_dist,
             )
+            # print("zero_jerk_cost", z_jerk.mean())
             cost_list.append(z_jerk)
 
         if self.cost_cfg.zero_vel_cfg is not None and self.zero_vel_cost.enabled:
@@ -322,13 +370,57 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 state_batch.velocity,
                 g_dist,
             )
+            # print("zero_vel_cost", z_vel.mean())
             cost_list.append(z_vel)
+        #print("[JOE] ----------- COST FUN CALL", ee_pos_batch.shape, state_batch.position.shape, self.custom_camera_cost)
+        #print(self.custom_camera_cost)
+        #if self.custom_camera_cost == True:
+            #print(self.custom_camera_cost)
+            # camera_pose = state.link_pose["camera_arm_link"]
+            # camera_pos_batch = camera_pose.position
+            # camera_quat_batch = camera_pose.quaternion
+            # #print(camera_pos_batch.shape, camera_quat_batch.shape, ee_pos_batch.shape, ee_quat_batch.shape)
+            # dists = self.camera_cost.forward(
+            #     camera_pos_batch,
+            #     camera_quat_batch,
+            #     self.camera_cost.obj_center,
+            #     # torch.tensor([1.05197, -.219925, 1.03373], device=ee_pos_batch.device)
+            # )
+            # dists = self.camera_cost.forward(
+            #     ee_pos_batch,
+            #     ee_quat_batch,
+            #     self.camera_cost.obj_center,
+            #     # torch.tensor([1.05197, -.219925, 1.03373], device=ee_pos_batch.device)
+            # )
+            # dists = self.camera_cost.forward(
+            #     camera_pos_batch,
+            #     camera_quat_batch,
+            #     self.camera_cost.obj_center,
+            #     # torch.tensor([1.05197, -.219925, 1.03373], device=ee_pos_batch.device)
+            # )
+            #print("custom_cost", dists.mean(), dists.shape)
+            #cost_list.append(dists)
+        if self.custom_ray_cost == True:
+            output_ray_costs = self.ray_cost.forward(camera_pos_batch, camera_quat_batch)
+            # print("ray costs", output_ray_costs.mean())
+            cost_list.append(output_ray_costs)
+
+        # print("cost list length", len(cost_list))
+
         with profiler.record_function("cat_sum"):
             if self.sum_horizon:
                 cost = cat_sum_horizon_reacher(cost_list)
             else:
+                #We do this
                 cost = cat_sum_reacher(cost_list)
 
+        #print(type(cost), len(cost_list))
+        #for cost_value in cost_list:
+        #    print(cost_value[0])
+        # print("custom ray cost", self.custom_ray_cost)
+        # if self.custom_ray_cost == True:
+        #    print("first cost value", cost[0])
+        #print(cost.shape, state_batch.shape)
         return cost
 
     def convergence_fn(

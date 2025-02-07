@@ -132,12 +132,14 @@ class NewtonOptBase(Optimizer, NewtonOptConfig):
         return True
 
     def _optimize(self, q: T_BHDOF_float, shift_steps=0, n_iters=None):
+        # print("newton base seed", q.shape, q[0])
         with profiler.record_function("newton_base/shift"):
             self._shift(shift_steps)
         # reshape q:
         if self.store_debug:
             self.debug.append(q.view(-1, self.action_horizon, self.d_action).clone())
         with profiler.record_function("newton_base/init_opt"):
+            # print(q.shape, self.n_problems, self.action_horizon)
             q = q.view(self.n_problems, self.action_horizon * self.d_action)
             grad_q = q.detach() * 0.0
         # run opt graph

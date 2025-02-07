@@ -22,7 +22,7 @@ model:
     base_ratio: 0.5
     max_dt: 0.04
   vel_scale: 1.0
-  control_space: 'ACCELERATION'
+  control_space: 'ACCELERATION' #'POSITION'
   teleport_mode: False
   state_finite_difference_mode: "CENTRAL"
 
@@ -50,16 +50,25 @@ cost:
     run_weight_acceleration: 1.0
     run_weight_jerk: 1.0
     null_space_weight: [10.0]
+  # bound_cfg:
+  #   weight: [0.1, 0.1,0.0,0.0]
+  #   activation_distance: [0.0,0.0,0.0,0.0] #-#0.01
+  #   #smooth_weight: [0.0,100.0,1.0,0.0]
+  #   smooth_weight: [0.0,20.0,0.0,0.0]
+  #   run_weight_velocity: 0.0
+  #   run_weight_acceleration: 1.0
+  #   run_weight_jerk: 1.0
+  #   null_space_weight: [0.00]
 
   primitive_collision_cfg:
-    weight: 100000.0
+    weight: 100000.0 #100000.0
     use_sweep: True
     sweep_steps: 4
     classify: False
     use_sweep_kernel: True
     use_speed_metric: False
     speed_dt: 0.1 # used only for speed metric
-    activation_distance: 0.025
+    activation_distance: 0.05 #0.025
 
   self_collision_cfg:
     weight: 50000.0
@@ -73,9 +82,9 @@ cost:
 
 
 mppi:
-  init_cov          : 0.05 #.5 #.5
+  init_cov          : 0.05 #0.05 old #.5 #.5
   gamma             : 0.98
-  n_iters           : 5
+  n_iters           : 15 #
   cold_start_n_iters: 5
   step_size_mean    : 0.9
   step_size_cov     : 0.01
@@ -86,7 +95,7 @@ mppi:
   cov_type          : "DIAG_A" #
   kappa             : 0.0001
   null_act_frac     : 0.05
-  sample_mode       : 'BEST'
+  sample_mode       : 'BEST' #'MEAN' #mean means choosing the mean of the distribution made as the actions to output. Best means choosing the best trajectory costs its seen
   base_action       : 'REPEAT'
   squash_fn         : 'CLAMP'
   n_problems        : 1

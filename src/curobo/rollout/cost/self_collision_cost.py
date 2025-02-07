@@ -75,4 +75,19 @@ class SelfCollisionCost(CostBase, SelfCollisionCostConfig):
         if self.classify:
             dist = torch.where(dist > 0, dist + 1.0, dist)
 
+        # print("dist type", type(dist))
+        # print("dist shape", dist.shape)
+        """
+        dist type <class 'torch.Tensor'>
+        dist shape torch.Size([1, 1])
+        dist type <class 'torch.Tensor'>
+        dist shape torch.Size([4, 32])
+        dist type <class 'torch.Tensor'>
+        dist shape torch.Size([4, 32])
+        dist type <class 'torch.Tensor'>
+        dist shape torch.Size([4, 5000])
+        dist type <class 'torch.Tensor'>
+        dist shape torch.Size([4, 5000]) 
+        """
+
         return dist

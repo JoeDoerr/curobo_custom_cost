@@ -340,6 +340,11 @@ class IKSolverConfig:
         arm_rollout_grad = ArmReacher(grad_cfg)
         arm_rollout_safety = ArmReacher(safety_cfg)
         aux_rollout = ArmReacher(aux_cfg)
+        #Custom
+        arm_rollout_mppi.camera_custom_cost = False
+        arm_rollout_grad.camera_custom_cost = False
+        arm_rollout_safety.camera_custom_cost = False
+        aux_rollout.camera_custom_cost = False
 
         config_dict = ParallelMPPIConfig.create_data_dict(
             config_data["mppi"], arm_rollout_mppi, tensor_args
