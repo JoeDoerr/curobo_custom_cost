@@ -403,7 +403,7 @@ class ParallelMPPI(ParticleOptBase, ParallelMPPIConfig):
             elif self.cov_type == CovType.DIAG_A:
                 # init_cov can either be a single value, or n_problems x 1 or n_problems x 7
                 init_cov = self.init_cov.clone()
-                print("init cov", init_cov)
+                # print("init cov", init_cov)
 
                 # if(init_cov.shape[-1] != self.d_action):
                 if len(init_cov.shape) == 1:
