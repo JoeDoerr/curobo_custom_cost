@@ -177,7 +177,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         #Custom:
         # self.custom_camera_cost = True
         self.custom_ray_cost = True
-        # self.scale_up_collision_cost_when_stuck = 1.0
+        self.scale_up_collision_cost_when_stuck = torch.tensor(1.0, device="cuda")
 
         if self.cost_cfg.cspace_cfg is not None:
             self.cost_cfg.cspace_cfg.dof = self.d_action
@@ -200,7 +200,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         self.cost_cfg.straight_line_cfg = CostConfig(weight=5.0, vec_weight=1.0, tensor_args=self.tensor_args)
         if self.cost_cfg.straight_line_cfg is not None:
             self.straight_line_cost = StraightLineCost(self.cost_cfg.straight_line_cfg)
-            # self.straight_line_cost.enable_cost()
+            self.straight_line_cost.enable_cost()
         if self.cost_cfg.zero_vel_cfg is not None:
             self.zero_vel_cost = ZeroCost(self.cost_cfg.zero_vel_cfg)
             self._max_vel = self.state_bounds["velocity"][1]
@@ -327,13 +327,11 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             st_cost = self.straight_line_cost.forward(ee_pos_batch)
             # print("straight_line_cost", st_cost.mean())
             #print("straight_line_cost", st_cost.mean(), st_cost.shape) #When we are barely moving straight line cost is 2.8 so maybe in the 0-5 region
-            cost_list.append(st_cost)
-            #roc = 100.0
-            #if st_cost.mean() < 5.0 and self.scale_up_collision_cost_when_stuck < 5000.0:
-            #    #print("--------------------------------------------------increasing collision cost!", self.scale_up_collision_cost_when_stuck)
-            #    self.scale_up_collision_cost_when_stuck += roc
-            #elif st_cost.mean() >= 5.0 and self.scale_up_collision_cost_when_stuck > (1.0 + roc):
-            #    self.scale_up_collision_cost_when_stuck -= roc
+            #cost_list.append(st_cost)
+            st_cost_mean = st_cost.mean()
+            roc = 1000.0
+            self.scale_up_collision_cost_when_stuck += roc * ((st_cost_mean < 5.0) & (self.scale_up_collision_cost_when_stuck < 10000.0)).float()
+            self.scale_up_collision_cost_when_stuck -= roc * ((st_cost_mean >= 5.0) & (self.scale_up_collision_cost_when_stuck > (1.0 + roc))).float()
 
         #Scale up the collision cost:
         #collision_cost_index = 0
