@@ -330,8 +330,8 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             #cost_list.append(st_cost)
             st_cost_mean = st_cost.mean()
             roc = 1000.0
-            self.scale_up_collision_cost_when_stuck += roc * ((st_cost_mean < 5.0) & (self.scale_up_collision_cost_when_stuck < 10000.0)).float()
-            self.scale_up_collision_cost_when_stuck -= roc * ((st_cost_mean >= 5.0) & (self.scale_up_collision_cost_when_stuck > (1.0 + roc))).float()
+            self.scale_up_collision_cost_when_stuck += roc * ((st_cost_mean < 15.0) & (self.scale_up_collision_cost_when_stuck < 20000.0)).float()
+            self.scale_up_collision_cost_when_stuck -= (roc / 2.0) * ((st_cost_mean >= 15.0) & (self.scale_up_collision_cost_when_stuck > (1.0 + roc))).float()
 
         #Scale up the collision cost:
         #collision_cost_index = 0
