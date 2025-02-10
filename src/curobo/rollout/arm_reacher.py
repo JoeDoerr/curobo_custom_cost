@@ -17,6 +17,7 @@ import torch
 import torch.autograd.profiler as profiler
 from curobo.rollout.cost.camera_cost import CameraCost
 from curobo.rollout.cost.ray_cost import RayCost
+from curobo.rollout.cost.point_cost import PointCost
 
 # CuRobo
 from curobo.geom.sdf.world import WorldCollision
@@ -220,6 +221,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
 
         self.camera_cost = CameraCost()
         self.ray_cost = RayCost()
+        self.point_cost = PointCost()
 
         self.z_tensor = torch.tensor(
             0, device=self.tensor_args.device, dtype=self.tensor_args.dtype
@@ -400,8 +402,10 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             #cost_list.append(dists)
         if self.custom_ray_cost == True:
             output_ray_costs = self.ray_cost.forward(camera_pos_batch, camera_quat_batch)
+            output_point_costs = self.point_cost.forward(ee_pos_batch, ee_quat_batch)
             # print("ray costs", output_ray_costs.mean())
             cost_list.append(output_ray_costs)
+            cost_list.append(output_point_costs)
 
         # print("cost list length", len(cost_list))
 
