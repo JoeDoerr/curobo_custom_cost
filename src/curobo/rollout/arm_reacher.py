@@ -198,7 +198,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             for i in self.kinematics.link_names:
                 if i != self.kinematics.ee_link:
                     self._link_pose_costs[i] = PoseCost(self.cost_cfg.link_pose_cfg)
-        self.cost_cfg.straight_line_cfg = CostConfig(weight=5.0, vec_weight=1.0, tensor_args=self.tensor_args)
+        self.cost_cfg.straight_line_cfg = CostConfig(weight=0.0, vec_weight=1.0, tensor_args=self.tensor_args)
         if self.cost_cfg.straight_line_cfg is not None:
             self.straight_line_cost = StraightLineCost(self.cost_cfg.straight_line_cfg)
             self.straight_line_cost.enable_cost()
@@ -327,9 +327,9 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         
         if self.cost_cfg.straight_line_cfg is not None and self.straight_line_cost.enabled:
             st_cost = self.straight_line_cost.forward(ee_pos_batch)
-            # print("straight_line_cost", st_cost.mean())
+            print("straight_line_cost", st_cost.mean())
             #print("straight_line_cost", st_cost.mean(), st_cost.shape) #When we are barely moving straight line cost is 2.8 so maybe in the 0-5 region
-            #cost_list.append(st_cost)
+            cost_list.append(st_cost)
             st_cost_mean = st_cost.mean()
             roc = 1000.0
             self.scale_up_collision_cost_when_stuck += roc * ((st_cost_mean < 15.0) & (self.scale_up_collision_cost_when_stuck < 20000.0)).float()

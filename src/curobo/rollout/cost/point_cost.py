@@ -37,8 +37,8 @@ class PointCost(CostBase):
         device = torch.device("cuda:0")
         self.weight = torch.tensor(1.0, device=device)
         self.tensor_args = TensorDeviceType()
-        zd = 0.05
-        xd = 0.05
+        zd = 0.1
+        xd = 0.2
         self.points = torch.tensor(
             [
                 [0., 0., 0.],
@@ -93,6 +93,7 @@ class PointCost(CostBase):
         # print("distances", distances)
 
         cost = torch.sum(distances, dim=-1)
+        # cost = torch.exp(100 * cost) - 1
         cost *= 10000
 
         # take minimum of symmetric cost; maybe not
