@@ -164,6 +164,16 @@ class WrapBase(WrapConfig):
         act = self.safety_rollout.get_robot_command(
             filtered_state, act_seq, state_idx=goal.batch_current_state_idx
         )
+        
+        #print("act type", type(act), act) #JointState
+        if act.dim() == 3:
+            act_2 = act.clone()
+            for i in range(self.needed_steps, self.action_horizon):
+                act.action.position[:, i, :] = act_2.action.position[:, -1, :]
+                act.action.velocity[:, i, :] = act_2.action.velocity[:, -1, :]
+                act.action.acceleration[:, i, :] = act_2.action.acceleration[:, -1, :]
+                act.action.jerk[:, i, :] = act_2.action.jerk[:, -1, :]
+            #print(result.action.position[:, :-10, :])
 
         if self.compute_metrics:
             with profiler.record_function("wrap_base/compute_metrics"):

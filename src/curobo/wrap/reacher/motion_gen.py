@@ -3643,6 +3643,7 @@ class MotionGen(MotionGenConfig):
                     return_all_solutions=plan_config.parallel_finetune
                     and plan_config.enable_finetune_trajopt,
                 )
+                print("[motiongen.py] After solve trajopt from solve state")
             if plan_config.enable_finetune_trajopt:
                 self.trajopt_solver.interpolation_type = og_value
             if self.store_debug_in_result:

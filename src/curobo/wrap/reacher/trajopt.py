@@ -922,6 +922,16 @@ class TrajOptSolver(TrajOptSolverConfig):
             goal_buffer.goal_state = None
         self.solver.reset()
         result = self.solver.solve(goal_buffer, seed_traj)
+        #print("result.action", type(result.action), result.action) #is JointState
+        #Set it based on needed_steps
+        print("[trajopt.py] result.action.position.shape", result.action.position.shape, self.needed_steps) #Copies over fine
+        # result_2 = result.clone()
+        # for i in range(self.needed_steps, self.action_horizon):
+        #     result.action.position[:, i, :] = result_2.action.position[:, -1, :]
+        #     result.action.velocity[:, i, :] = result_2.action.velocity[:, -1, :]
+        #     result.action.acceleration[:, i, :] = result_2.action.acceleration[:, -1, :]
+        #     result.action.jerk[:, i, :] = result_2.action.jerk[:, -1, :]
+        # #print(result.action.position[:, :-10, :])
         log_info("Ran TO")
         traj_result = self._get_result(
             result,
@@ -1328,6 +1338,7 @@ class TrajOptSolver(TrajOptSolverConfig):
         interpolated_trajs, last_tstep, opt_dt, buffer_change = self.get_interpolated_trajectory(
             result.action
         )
+
         #print("TRIM STEPS ---------------------------------------------------", self.trim_steps is not None)
 
         if self.sync_cuda_time:

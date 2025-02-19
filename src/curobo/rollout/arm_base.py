@@ -230,6 +230,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         if config is not None:
             ArmBaseConfig.__init__(self, **vars(config))
         RolloutBase.__init__(self)
+        self.needed_steps = 1
         self._init_after_config_load()
 
     @profiler.record_function("arm_base/init_after_config_load")
@@ -622,7 +623,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         #print("act seq", act_seq[0])
         # print("Changing last step of trajectory to step right before last step") #---------------
         if state.state_seq.position.shape[1] > 1:
-            joint_state_attributes = ["position"]#, "velocity", "acceleration", "jerk"]
+            joint_state_attributes = ["position", "velocity", "acceleration", "jerk"]
 
             for attr in joint_state_attributes:
                 tensor = getattr(state.state_seq, attr)
@@ -633,6 +634,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
                     #updated_tensor[:, -4, :] = tensor[:, -5, :].detach()
                     for i in range(self.needed_steps, updated_tensor.shape[1]):
                         updated_tensor[:, i, :] = tensor[:, -1, :].detach()
+                    #print("Last state", tensor[0, -1, :])
                     # updated_tensor[:, -3, :] = tensor[:, -4, :].detach()
                     # updated_tensor[:, -2, :] = tensor[:, -4, :].detach()
                     # updated_tensor[:, -1, :] = tensor[:, -4, :].detach()  # Copy values but detach only for the last step
