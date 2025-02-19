@@ -621,29 +621,41 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         #print("state seq", state.state_seq[0].position) #KinematicModelState
         #print("act seq", act_seq[0])
         # print("Changing last step of trajectory to step right before last step") #---------------
-        # joint_state_attributes = ["position", "velocity", "acceleration", "jerk"]
+        if state.state_seq.position.shape[1] > 1:
+            joint_state_attributes = ["position"]#, "velocity", "acceleration", "jerk"]
 
-        # for attr in joint_state_attributes:
-        #     tensor = getattr(state.state_seq, attr)
-        #     if isinstance(tensor, torch.Tensor):
-        #         tensor = tensor.contiguous()  # Ensure it's not a problematic view
-        #         updated_tensor = tensor.clone()  # Clone to avoid modifying views in-place
-        #         updated_tensor[:, -1, :] = tensor[:, -2, :].detach()  # Copy values but detach only for the last step
-        #         setattr(state.state_seq, attr, updated_tensor)  # Assign back to state_seq
+            for attr in joint_state_attributes:
+                tensor = getattr(state.state_seq, attr)
+                if isinstance(tensor, torch.Tensor):
+                    #print("state seq", attr, tensor.shape)
+                    tensor = tensor.contiguous()  # Ensure it's not a problematic view
+                    updated_tensor = tensor.clone()  # Clone to avoid modifying views in-place
+                    #updated_tensor[:, -4, :] = tensor[:, -5, :].detach()
+                    for i in range(self.needed_steps, updated_tensor.shape[1]):
+                        updated_tensor[:, i, :] = tensor[:, -1, :].detach()
+                    # updated_tensor[:, -3, :] = tensor[:, -4, :].detach()
+                    # updated_tensor[:, -2, :] = tensor[:, -4, :].detach()
+                    # updated_tensor[:, -1, :] = tensor[:, -4, :].detach()  # Copy values but detach only for the last step
+                    setattr(state.state_seq, attr, updated_tensor)  # Assign back to state_seq
 
-        # # Modify other tensors in KinematicModelState
-        # seq_attributes = [
-        #     "ee_pos_seq", "ee_quat_seq", "robot_spheres",
-        #     "link_pos_seq", "link_quat_seq", "lin_jac_seq", "ang_jac_seq"
-        # ]
+            # Modify other tensors in KinematicModelState
+            seq_attributes = [
+                "ee_pos_seq", "ee_quat_seq", "robot_spheres",
+                "link_pos_seq", "link_quat_seq", "lin_jac_seq", "ang_jac_seq"
+            ]
 
-        # for attr in seq_attributes:
-        #     tensor = getattr(state, attr)
-        #     if isinstance(tensor, torch.Tensor):
-        #         tensor = tensor.contiguous()  # Ensure it's not a problematic view
-        #         updated_tensor = tensor.clone()  # Clone to avoid modifying views in-place
-        #         updated_tensor[:, -1, :] = tensor[:, -2, :].detach()  # Copy values but detach only for the last step
-        #         setattr(state, attr, updated_tensor)  # Assign back to state
+            for attr in seq_attributes:
+                tensor = getattr(state, attr)
+                if isinstance(tensor, torch.Tensor):
+                    tensor = tensor.contiguous()  # Ensure it's not a problematic view
+                    updated_tensor = tensor.clone()  # Clone to avoid modifying views in-place
+                    #updated_tensor[:, -4, :] = tensor[:, -5, :].detach()
+                    for i in range(self.needed_steps, updated_tensor.shape[1]):
+                        updated_tensor[:, i, :] = tensor[:, -1, :].detach()
+                    # updated_tensor[:, -3, :] = tensor[:, -4, :].detach()
+                    # updated_tensor[:, -2, :] = tensor[:, -4, :].detach()
+                    # updated_tensor[:, -1, :] = tensor[:, -4, :].detach()  # Copy values but detach only for the last step
+                    setattr(state, attr, updated_tensor)  # Assign back to state
         #print("state", state.state_seq[0].position, state.state_seq.shape)
         #----------------------------------------------------------------------------------------
 
@@ -653,7 +665,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         #     print(f"An error occurred: {e}")
 
         with profiler.record_function("cost/all"):
-            cost_seq = self.cost_fn(state, act_seq)
+            cost_seq = self.cost_fn(state, act_seq) #self here is the optimizer[n].rollout_fn
 
         sim_trajs = Trajectory(actions=act_seq, costs=cost_seq, state=state)
 

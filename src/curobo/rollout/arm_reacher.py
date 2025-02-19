@@ -198,7 +198,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             for i in self.kinematics.link_names:
                 if i != self.kinematics.ee_link:
                     self._link_pose_costs[i] = PoseCost(self.cost_cfg.link_pose_cfg)
-        self.cost_cfg.straight_line_cfg = CostConfig(weight=5.0, vec_weight=1.0, tensor_args=self.tensor_args)
+        self.cost_cfg.straight_line_cfg = CostConfig(weight=10.0, vec_weight=1.0, tensor_args=self.tensor_args)
         if self.cost_cfg.straight_line_cfg is not None:
             self.straight_line_cost = StraightLineCost(self.cost_cfg.straight_line_cfg)
             self.straight_line_cost.enable_cost()
@@ -291,7 +291,8 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 # print("desired goal value", self._goal_buffer.goal_pose.position)
                 # if self.custom_camera_cost == True:
                 #     goal_cost = goal_cost * 0.0
-                cost_list.append(goal_cost)
+                if self.custom_ray_cost == False:
+                    cost_list.append(goal_cost)
         with profiler.record_function("cost/link_poses"):
             if self._goal_buffer.links_goal_pose is not None and self.cost_cfg.pose_cfg is not None:
                 link_poses = state.link_pose
@@ -309,7 +310,8 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                             # print("goal_link_cost", c.mean())
                             # if self.custom_camera_cost == True:
                             #     c = c * 0.0
-                            cost_list.append(c)
+                            if self.custom_ray_cost == False:
+                                cost_list.append(c)
 
         if (
             self._goal_buffer.goal_state is not None
@@ -322,7 +324,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 state_batch.position,
                 self._goal_buffer.batch_goal_state_idx,
             )
-            # print("joint_cost", joint_cost.mean())
+            #print("joint_cost", joint_cost.mean())
             cost_list.append(joint_cost)
         
         if self.cost_cfg.straight_line_cfg is not None and self.straight_line_cost.enabled:
@@ -330,21 +332,21 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             # print("straight_line_cost", st_cost.mean())
             #print("straight_line_cost", st_cost.mean(), st_cost.shape) #When we are barely moving straight line cost is 2.8 so maybe in the 0-5 region
             #cost_list.append(st_cost)
-            st_cost_mean = st_cost.mean()
-            roc = 1000.0
-            self.scale_up_collision_cost_when_stuck += roc * ((st_cost_mean < 15.0) & (self.scale_up_collision_cost_when_stuck < 20000.0)).float()
-            self.scale_up_collision_cost_when_stuck -= (roc / 2.0) * ((st_cost_mean >= 15.0) & (self.scale_up_collision_cost_when_stuck > (1.0 + roc))).float()
+            #st_cost_mean = st_cost.mean()
+            #roc = 1000.0
+            #self.scale_up_collision_cost_when_stuck += roc * ((st_cost_mean < 10.0) & (self.scale_up_collision_cost_when_stuck < 20000.0)).float()
+            #self.scale_up_collision_cost_when_stuck -= (roc) * ((st_cost_mean >= 10.0) & (self.scale_up_collision_cost_when_stuck > (1.0 + roc))).float()
 
-        #Scale up the collision cost:
-        #collision_cost_index = 0
-        #if self.bound_cost.enabled:
+        # #Scale up the collision cost:
+        # collision_cost_index = 0
+        # if self.bound_cost.enabled:
         #    collision_cost_index+=1
-        #if self.cost_cfg.stop_cfg is not None and self.stop_cost.enabled:
+        # if self.cost_cfg.stop_cfg is not None and self.stop_cost.enabled:
         #    collision_cost_index+=1
-        #if self.cost_cfg.self_collision_cfg is not None and self.robot_self_collision_cost.enabled:
+        # if self.cost_cfg.self_collision_cfg is not None and self.robot_self_collision_cost.enabled:
         #    collision_cost_index+=1
-        ##st_cost is [batch, trajectory]
-        #cost_list[collision_cost_index] *= self.scale_up_collision_cost_when_stuck
+        # #st_cost is [batch, trajectory]
+        # cost_list[collision_cost_index] *= self.scale_up_collision_cost_when_stuck
 
         if (
             self.cost_cfg.zero_acc_cfg is not None
@@ -416,13 +418,14 @@ class ArmReacher(ArmBase, ArmReacherConfig):
                 #We do this
                 cost = cat_sum_reacher(cost_list)
 
-        #print(type(cost), len(cost_list))
+        #print("cost list", len(cost_list))
         #for cost_value in cost_list:
         #    print(cost_value[0])
         # print("custom ray cost", self.custom_ray_cost)
         # if self.custom_ray_cost == True:
         #    print("first cost value", cost[0])
         #print(cost.shape, state_batch.shape)
+        #print("cost mean", cost.mean())
         return cost
 
     def convergence_fn(
