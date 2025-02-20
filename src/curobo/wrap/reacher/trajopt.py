@@ -921,7 +921,7 @@ class TrajOptSolver(TrajOptSolverConfig):
         if goal_buffer.goal_pose.position is not None:
             goal_buffer.goal_state = None
         self.solver.reset()
-        result = self.solver.solve(goal_buffer, seed_traj)
+        result = self.solver.solve(goal_buffer, seed_traj, fixed_steps = range(self.needed_steps, self.action_horizon))
         #print("result.action", type(result.action), result.action) #is JointState
         #Set it based on needed_steps
         print("[trajopt.py] result.action.position.shape", result.action.position.shape, self.needed_steps) #Copies over fine

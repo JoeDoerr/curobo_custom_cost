@@ -141,7 +141,7 @@ class WrapBase(WrapConfig):
     def tensor_args(self):
         return self.safety_rollout.tensor_args
 
-    def solve(self, goal: Goal, seed: Optional[torch.Tensor] = None):
+    def solve(self, goal: Goal, seed: Optional[torch.Tensor] = None, fixed_steps: Optional[List[int]] = None):
         metrics = None
 
         filtered_state = self.safety_rollout.filter_robot_state(goal.current_state)
@@ -166,14 +166,14 @@ class WrapBase(WrapConfig):
         )
         
         #print("act type", type(act), act) #JointState
-        if act.dim() == 3:
+        if act.position.dim() == 3 and fixed_steps is not None:
             act_2 = act.clone()
-            for i in range(self.needed_steps, self.action_horizon):
-                act.action.position[:, i, :] = act_2.action.position[:, -1, :]
-                act.action.velocity[:, i, :] = act_2.action.velocity[:, -1, :]
-                act.action.acceleration[:, i, :] = act_2.action.acceleration[:, -1, :]
-                act.action.jerk[:, i, :] = act_2.action.jerk[:, -1, :]
-            #print(result.action.position[:, :-10, :])
+            for i in fixed_steps:
+                act.position[:, i, :] = act_2.position[:, -1, :]
+                act.velocity[:, i, :] = act_2.velocity[:, -1, :]
+                act.acceleration[:, i, :] = act_2.acceleration[:, -1, :]
+                act.jerk[:, i, :] = act_2.jerk[:, -1, :]
+            print(act.position[:, 45, :])
 
         if self.compute_metrics:
             with profiler.record_function("wrap_base/compute_metrics"):
