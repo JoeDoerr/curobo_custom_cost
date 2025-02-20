@@ -13,6 +13,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
+import time
+
 # Third Party
 import torch
 import torch.autograd.profiler as profiler
@@ -618,12 +620,14 @@ class ArmBase(RolloutBase, ArmBaseConfig):
 
         #print("act", type(act_seq))
         #print(act_seq.shape)
+        #t0 = time.time()
         if act_seq.shape[1] > 1 and self.needed_steps is not None:
             act_seq = act_seq.contiguous()
             act_2 = act_seq.clone()
-            for i in range(self.needed_steps, self.action_horizon):
-                act_seq.data[:, i, :] = act_2[:, -1, :].detach()
-            #print(act.position[:, 45, :])
+            # for i in range(self.needed_steps, self.action_horizon):
+            #     act_seq.data[:, i, :] = act_2[:, -1, :].detach()
+            act_seq.data[:, self.needed_steps:self.action_horizon, :] = act_2[:, -1, :].detach().unsqueeze(1).expand(-1, self.action_horizon - self.needed_steps, -1)
+        #print("Time loop took", time.time() - t0)
 
         with profiler.record_function("robot_model/rollout"):
             state = self.dynamics_model.forward(

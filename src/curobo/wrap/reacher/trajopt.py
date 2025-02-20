@@ -1572,6 +1572,7 @@ class TrajOptSolver(TrajOptSolverConfig):
         # Setting final state to end_q explicitly to avoid matmul numerical precision issues.
         seed[..., -1:, :] = end_q
 
+        #print("end_q.shape", end_q.shape, seed.shape)
         seed[..., -1 * remaining_steps:, :] = end_q
 
         return seed
