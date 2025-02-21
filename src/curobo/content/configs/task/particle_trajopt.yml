@@ -182,7 +182,7 @@ cost:
 
 
 mppi:
-  init_cov          : 0.1 #0.5
+  init_cov          : 0.5
   gamma             : 1.0
   n_iters           : 2
   cold_start_n_iters: null

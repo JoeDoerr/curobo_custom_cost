@@ -3634,6 +3634,11 @@ class MotionGen(MotionGenConfig):
                 #self.rospy_communication_custom()
                 print("time communication took", time.time() - t0)
 
+                for opt in self.trajopt_solver.solver.optimizers:
+                    opt.rollout_fn.custom_bound_cost = True
+                for opt in self.finetune_trajopt_solver.solver.optimizers:
+                    opt.rollout_fn.custom_bound_cost = True
+
                 traj_result = self._solve_trajopt_from_solve_state(
                     goal,
                     solve_state,

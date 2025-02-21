@@ -232,7 +232,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         if config is not None:
             ArmBaseConfig.__init__(self, **vars(config))
         RolloutBase.__init__(self)
-        self.needed_steps = 1
+        self.needed_steps = 50-3-1
         self._init_after_config_load()
 
     @profiler.record_function("arm_base/init_after_config_load")
@@ -627,12 +627,16 @@ class ArmBase(RolloutBase, ArmBaseConfig):
             # for i in range(self.needed_steps, self.action_horizon):
             #     act_seq.data[:, i, :] = act_2[:, -1, :].detach()
             act_seq.data[:, self.needed_steps:self.action_horizon, :] = act_2[:, -1, :].detach().unsqueeze(1).expand(-1, self.action_horizon - self.needed_steps, -1)
-        #print("Time loop took", time.time() - t0)
+            #print("Time loop took", time.time() - t0)
+            #print("act_seq at the point it goes to the last position", act_seq[0, self.needed_steps-3:self.needed_steps+2, :])
 
         with profiler.record_function("robot_model/rollout"):
             state = self.dynamics_model.forward(
                 self.start_state, act_seq, self._goal_buffer.batch_current_state_idx
             )
+
+        # if act_seq.shape[1] > 1:
+        #     print("state seq velocities", state.state_seq.velocity[0, 3+self.needed_steps-3:3+self.needed_steps+2, :])
         
         #print("state seq", state.state_seq[0].position) #KinematicModelState
         #print("act seq", act_seq[0])

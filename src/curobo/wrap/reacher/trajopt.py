@@ -1573,7 +1573,9 @@ class TrajOptSolver(TrajOptSolverConfig):
         seed[..., -1:, :] = end_q
 
         #print("end_q.shape", end_q.shape, seed.shape)
-        seed[..., -1 * remaining_steps:, :] = end_q
+        seed[..., -1 * (remaining_steps+1):, :] = end_q
+
+        #print("")
 
         return seed
 

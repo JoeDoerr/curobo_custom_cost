@@ -178,6 +178,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         #Custom:
         # self.custom_camera_cost = True
         self.custom_ray_cost = True
+        self.custom_bound_cost = False
         self.scale_up_collision_cost_when_stuck = torch.tensor(1.0, device="cuda")
 
         if self.cost_cfg.cspace_cfg is not None:
@@ -198,10 +199,10 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             for i in self.kinematics.link_names:
                 if i != self.kinematics.ee_link:
                     self._link_pose_costs[i] = PoseCost(self.cost_cfg.link_pose_cfg)
-        self.cost_cfg.straight_line_cfg = CostConfig(weight=100.0, vec_weight=1.0, tensor_args=self.tensor_args)
+        self.cost_cfg.straight_line_cfg = CostConfig(weight=1.0, vec_weight=1.0, tensor_args=self.tensor_args)
         if self.cost_cfg.straight_line_cfg is not None:
             self.straight_line_cost = StraightLineCost(self.cost_cfg.straight_line_cfg)
-            self.straight_line_cost.enable_cost()
+            #self.straight_line_cost.enable_cost()
         if self.cost_cfg.zero_vel_cfg is not None:
             self.zero_vel_cost = ZeroCost(self.cost_cfg.zero_vel_cfg)
             self._max_vel = self.state_bounds["velocity"][1]
@@ -410,6 +411,26 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             cost_list.append(output_point_costs)
 
         # print("cost list length", len(cost_list))
+
+        #Reinforcing velocity limits
+        if self.custom_bound_cost == True:
+            velocity_limits = self.bound_cost.joint_limits.velocity.clone()
+            velocity_limits_lower = velocity_limits[0].unsqueeze(0).unsqueeze(0) #[1, 1, dof], originally [2, 8]
+            velocity_limits_higher = velocity_limits[1].unsqueeze(0).unsqueeze(0)
+            print("velocity_limits", velocity_limits.shape, state_batch.velocity.shape, state_batch.position.shape)
+            activation_distance = 0.015 #0.015
+            diff_lower = state_batch.velocity - (velocity_limits_lower + activation_distance) #[batch, horizon, dof]
+            print((velocity_limits_lower + activation_distance), (velocity_limits_higher - activation_distance))
+            diff_higher = state_batch.velocity - (velocity_limits_higher - activation_distance) #[batch, horizon, dof]
+            #activated = (diff_lower < 0.0) | (diff_higher > 0.0)
+            #It should be worse the higher magnitude, with diff_lower being negative always
+            gradient_creator_lower = (diff_lower * -1) * (diff_lower < 0.0)
+            gradient_creator_higher = diff_higher * (diff_higher > 0.0)
+            #print("activated shape", activated.shape, gradient_creator.shape, (activated * gradient_creator).shape)
+            velocity_limit_cost = torch.sum(gradient_creator_lower + gradient_creator_higher, dim=-1) #[batch, horizon]
+            velocity_limit_cost *= 30000 #30000
+            print("velocity limit cost", velocity_limit_cost.mean(), velocity_limit_cost.shape)
+            cost_list.append(velocity_limit_cost)
 
         with profiler.record_function("cat_sum"):
             if self.sum_horizon:
