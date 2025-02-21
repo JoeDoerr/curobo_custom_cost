@@ -921,7 +921,7 @@ class TrajOptSolver(TrajOptSolverConfig):
         if goal_buffer.goal_pose.position is not None:
             goal_buffer.goal_state = None
         self.solver.reset()
-        result = self.solver.solve(goal_buffer, seed_traj, fixed_steps = range(self.needed_steps, self.action_horizon))
+        result = self.solver.solve(goal_buffer, seed_traj, fixed_steps = self.needed_steps)
         #print("result.action", type(result.action), result.action) #is JointState
         #Set it based on needed_steps
         print("[trajopt.py] result.action.position.shape", result.action.position.shape, self.needed_steps) #Copies over fine
@@ -2044,10 +2044,10 @@ def jit_feasible_success(
         converge = cspace_error[..., -1] <= cspace_threshold
 
     success = torch.logical_and(feasible, converge)
-    success = feasible
+    #success = feasible
     print("[trajopt.py]------------------------------------------------------------------------------------------------------------------success", success, success.shape)
-    feasible.fill_(True)
-    success = feasible
+    #feasible.fill_(True)
+    #success = feasible
     #success = torch.full_like(feasible, True, dtype=torch.bool, device=feasible.device)
     return success
 

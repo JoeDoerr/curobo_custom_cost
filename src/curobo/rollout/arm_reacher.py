@@ -417,10 +417,10 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             velocity_limits = self.bound_cost.joint_limits.velocity.clone()
             velocity_limits_lower = velocity_limits[0].unsqueeze(0).unsqueeze(0) #[1, 1, dof], originally [2, 8]
             velocity_limits_higher = velocity_limits[1].unsqueeze(0).unsqueeze(0)
-            print("velocity_limits", velocity_limits.shape, state_batch.velocity.shape, state_batch.position.shape)
-            activation_distance = 0.015 #0.015
+            #print("velocity_limits", velocity_limits.shape, state_batch.velocity.shape, state_batch.position.shape)
+            activation_distance = 0.02 #0.015
             diff_lower = state_batch.velocity - (velocity_limits_lower + activation_distance) #[batch, horizon, dof]
-            print((velocity_limits_lower + activation_distance), (velocity_limits_higher - activation_distance))
+            #print((velocity_limits_lower + activation_distance), (velocity_limits_higher - activation_distance))
             diff_higher = state_batch.velocity - (velocity_limits_higher - activation_distance) #[batch, horizon, dof]
             #activated = (diff_lower < 0.0) | (diff_higher > 0.0)
             #It should be worse the higher magnitude, with diff_lower being negative always
@@ -428,8 +428,8 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             gradient_creator_higher = diff_higher * (diff_higher > 0.0)
             #print("activated shape", activated.shape, gradient_creator.shape, (activated * gradient_creator).shape)
             velocity_limit_cost = torch.sum(gradient_creator_lower + gradient_creator_higher, dim=-1) #[batch, horizon]
-            velocity_limit_cost *= 30000 #30000
-            print("velocity limit cost", velocity_limit_cost.mean(), velocity_limit_cost.shape)
+            velocity_limit_cost *= 300000 #30000
+            #print("velocity limit cost", velocity_limit_cost.mean(), velocity_limit_cost.shape)
             cost_list.append(velocity_limit_cost)
 
         with profiler.record_function("cat_sum"):
@@ -445,7 +445,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         # print("custom ray cost", self.custom_ray_cost)
         # if self.custom_ray_cost == True:
         #    print("first cost value", cost[0])
-        #print(cost.shape, state_batch.shape)
+        print(cost.shape, state_batch.shape)
         #print("cost mean", cost.mean())
         return cost
 

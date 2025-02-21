@@ -141,7 +141,7 @@ class WrapBase(WrapConfig):
     def tensor_args(self):
         return self.safety_rollout.tensor_args
 
-    def solve(self, goal: Goal, seed: Optional[torch.Tensor] = None, fixed_steps: Optional[List[int]] = None):
+    def solve(self, goal: Goal, seed: Optional[torch.Tensor] = None, fixed_steps: Optional[int] = None):
         metrics = None
 
         filtered_state = self.safety_rollout.filter_robot_state(goal.current_state)
@@ -159,6 +159,12 @@ class WrapBase(WrapConfig):
                 act_seq = self.optimize(seed, shift_steps=0)
             self._init_solver = True
         act_seq = self.optimize(seed, shift_steps=0)
+
+        if act_seq.shape[1] > 1:
+            act_seq = act_seq.contiguous()
+            act_2 = act_seq.clone()
+            act_seq.data[:, fixed_steps:act_seq.shape[1], :] = act_2[:, -1, :].detach().unsqueeze(1).expand(-1, act_seq.shape[1] - fixed_steps, -1)
+
         self.opt_dt = time.time() - start_time
 
         act = self.safety_rollout.get_robot_command(
@@ -166,14 +172,14 @@ class WrapBase(WrapConfig):
         )
         
         #print("act type", type(act), act) #JointState
-        if act.position.dim() == 3 and fixed_steps is not None:
-            act_2 = act.clone()
-            for i in fixed_steps:
-                act.position[:, i, :] = act_2.position[:, -1, :]
-                act.velocity[:, i, :] = act_2.velocity[:, -1, :]
-                act.acceleration[:, i, :] = act_2.acceleration[:, -1, :]
-                act.jerk[:, i, :] = act_2.jerk[:, -1, :]
-            # print(act.position[:, 45, :])
+        # if act.position.dim() == 3 and fixed_steps is not None:
+        #     act_2 = act.clone()
+        #     for i in fixed_steps:
+        #         act.position[:, i, :] = act_2.position[:, -1, :]
+        #         act.velocity[:, i, :] = act_2.velocity[:, -1, :]
+        #         act.acceleration[:, i, :] = act_2.acceleration[:, -1, :]
+        #         act.jerk[:, i, :] = act_2.jerk[:, -1, :]
+        #     # print(act.position[:, 45, :])
 
         if self.compute_metrics:
             with profiler.record_function("wrap_base/compute_metrics"):
