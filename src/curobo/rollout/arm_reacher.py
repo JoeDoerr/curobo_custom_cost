@@ -445,7 +445,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         # print("custom ray cost", self.custom_ray_cost)
         # if self.custom_ray_cost == True:
         #    print("first cost value", cost[0])
-        print(cost.shape, state_batch.shape)
+        # print(cost.shape, state_batch.shape)
         #print("cost mean", cost.mean())
         return cost
 

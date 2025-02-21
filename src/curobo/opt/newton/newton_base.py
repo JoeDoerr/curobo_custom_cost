@@ -72,6 +72,7 @@ class NewtonOptBase(Optimizer, NewtonOptConfig):
         self,
         config: Optional[NewtonOptConfig] = None,
     ):
+        self.number_fixed = 1
         if config is not None:
             NewtonOptConfig.__init__(self, **vars(config))
         self.d_opt = self.action_horizon * self.d_action
@@ -417,10 +418,12 @@ class NewtonOptBase(Optimizer, NewtonOptConfig):
         return best_x, best_c, best_grad
 
     def _approx_line_search(self, x, step_direction):
+        print("number fixed", self.number_fixed)
+        print("fix terminal", self.fix_terminal_action)
         if self.step_scale != 0.0 and self.step_scale != 1.0:
             step_direction = self.scale_step_direction(step_direction)
         if self.fix_terminal_action and self.action_horizon > 1:
-            step_direction[..., (self.action_horizon - 1) * self.d_action :] = 0.0
+            step_direction[..., (self.action_horizon - self.number_fixed) * self.d_action :] = 0.0
         if self.line_search_type == LineSearchType.GREEDY:
             best_x, best_c, best_grad = self._greedy_line_search(x, step_direction)
         elif self.line_search_type == LineSearchType.ARMIJO:
@@ -432,7 +435,7 @@ class NewtonOptBase(Optimizer, NewtonOptConfig):
         ]:
             best_x, best_c, best_grad = self._wolfe_line_search(x, step_direction)
         if self.fix_terminal_action and self.action_horizon > 1:
-            best_grad[..., (self.action_horizon - 1) * self.d_action :] = 0.0
+            best_grad[..., (self.action_horizon - self.number_fixed) * self.d_action :] = 0.0
         return best_x, best_c, best_grad
 
     def check_convergence(self, cost):
