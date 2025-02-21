@@ -232,7 +232,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         if config is not None:
             ArmBaseConfig.__init__(self, **vars(config))
         RolloutBase.__init__(self)
-        self.needed_steps = 50-3-1
+        self.needed_steps = 50-1-3
         self._init_after_config_load()
 
     @profiler.record_function("arm_base/init_after_config_load")

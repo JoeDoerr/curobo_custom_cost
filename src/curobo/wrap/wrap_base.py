@@ -173,7 +173,7 @@ class WrapBase(WrapConfig):
                 act.velocity[:, i, :] = act_2.velocity[:, -1, :]
                 act.acceleration[:, i, :] = act_2.acceleration[:, -1, :]
                 act.jerk[:, i, :] = act_2.jerk[:, -1, :]
-            #print(act.position[:, 45, :])
+            # print(act.position[:, 45, :])
 
         if self.compute_metrics:
             with profiler.record_function("wrap_base/compute_metrics"):
