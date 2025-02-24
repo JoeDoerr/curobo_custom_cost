@@ -418,8 +418,8 @@ class NewtonOptBase(Optimizer, NewtonOptConfig):
         return best_x, best_c, best_grad
 
     def _approx_line_search(self, x, step_direction):
-        print("number fixed", self.number_fixed)
-        print("fix terminal", self.fix_terminal_action)
+        # print("number fixed", self.number_fixed)
+        # print("fix terminal", self.fix_terminal_action)
         if self.step_scale != 0.0 and self.step_scale != 1.0:
             step_direction = self.scale_step_direction(step_direction)
         if self.fix_terminal_action and self.action_horizon > 1:
