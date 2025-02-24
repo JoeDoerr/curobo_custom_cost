@@ -3346,7 +3346,7 @@ class MotionGen(MotionGenConfig):
         Returns:
             MotionGenResult: Result of planning.
         """
-        print_things = True
+        print_things = False
         log_file_path = os.path.expanduser("~/trace_curobo_logs.txt")
         trajopt_seed_traj = None
         trajopt_seed_success = None
