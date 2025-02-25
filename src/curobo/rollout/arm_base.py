@@ -232,7 +232,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         if config is not None:
             ArmBaseConfig.__init__(self, **vars(config))
         RolloutBase.__init__(self)
-        self.needed_steps = 44-1-3
+        self.needed_steps = 64-1-3
         self.init_pos_1 = torch.zeros(8, device=self.tensor_args.device)
         self.init_pos_2 = torch.zeros(8, device=self.tensor_args.device)
         self.init_pos_3 = torch.zeros(8, device=self.tensor_args.device)
