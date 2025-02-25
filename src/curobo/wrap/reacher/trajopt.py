@@ -924,7 +924,7 @@ class TrajOptSolver(TrajOptSolverConfig):
         result = self.solver.solve(goal_buffer, seed_traj, fixed_steps = self.needed_steps)
         #print("result.action", type(result.action), result.action) #is JointState
         #Set it based on needed_steps
-        print("[trajopt.py] result.action.position.shape", result.action.position.shape, self.needed_steps) #Copies over fine
+        #print("[trajopt.py] result.action.position.shape", result.action.position.shape, self.needed_steps) #Copies over fine
         # result_2 = result.clone()
         # for i in range(self.needed_steps, self.action_horizon):
         #     result.action.position[:, i, :] = result_2.action.position[:, -1, :]
@@ -2046,8 +2046,8 @@ def jit_feasible_success(
     success = torch.logical_and(feasible, converge)
     #success = feasible
     print("[trajopt.py]------------------------------------------------------------------------------------------------------------------success", success, success.shape)
-    #feasible.fill_(True)
-    #success = feasible
+    feasible.fill_(True)
+    success = feasible
     #success = torch.full_like(feasible, True, dtype=torch.bool, device=feasible.device)
     return success
 

@@ -328,11 +328,11 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             #print("joint_cost", joint_cost.mean())
             cost_list.append(joint_cost)
         
-        if self.cost_cfg.straight_line_cfg is not None and self.straight_line_cost.enabled:
-            st_cost = self.straight_line_cost.forward(ee_pos_batch)
+        #if self.cost_cfg.straight_line_cfg is not None and self.straight_line_cost.enabled:
+            #st_cost = self.straight_line_cost.forward(ee_pos_batch)
             # print("straight_line_cost", st_cost.mean())
             #print("straight_line_cost", st_cost.mean(), st_cost.shape) #When we are barely moving straight line cost is 2.8 so maybe in the 0-5 region
-            cost_list.append(st_cost)
+            #cost_list.append(st_cost)
             #st_cost_mean = st_cost.mean()
             #roc = 1000.0
             #self.scale_up_collision_cost_when_stuck += roc * ((st_cost_mean < 10.0) & (self.scale_up_collision_cost_when_stuck < 20000.0)).float()
@@ -413,24 +413,24 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         # print("cost list length", len(cost_list))
 
         #Reinforcing velocity limits
-        if self.custom_bound_cost == True:
-            velocity_limits = self.bound_cost.joint_limits.velocity.clone()
-            velocity_limits_lower = velocity_limits[0].unsqueeze(0).unsqueeze(0) #[1, 1, dof], originally [2, 8]
-            velocity_limits_higher = velocity_limits[1].unsqueeze(0).unsqueeze(0)
-            #print("velocity_limits", velocity_limits.shape, state_batch.velocity.shape, state_batch.position.shape)
-            activation_distance = 0.02 #0.015
-            diff_lower = state_batch.velocity - (velocity_limits_lower + activation_distance) #[batch, horizon, dof]
-            #print((velocity_limits_lower + activation_distance), (velocity_limits_higher - activation_distance))
-            diff_higher = state_batch.velocity - (velocity_limits_higher - activation_distance) #[batch, horizon, dof]
-            #activated = (diff_lower < 0.0) | (diff_higher > 0.0)
-            #It should be worse the higher magnitude, with diff_lower being negative always
-            gradient_creator_lower = (diff_lower * -1) * (diff_lower < 0.0)
-            gradient_creator_higher = diff_higher * (diff_higher > 0.0)
-            #print("activated shape", activated.shape, gradient_creator.shape, (activated * gradient_creator).shape)
-            velocity_limit_cost = torch.sum(gradient_creator_lower + gradient_creator_higher, dim=-1) #[batch, horizon]
-            velocity_limit_cost *= 300000 #30000
-            #print("velocity limit cost", velocity_limit_cost.mean(), velocity_limit_cost.shape)
-            cost_list.append(velocity_limit_cost)
+        # if self.custom_bound_cost == True:
+        #     velocity_limits = self.bound_cost.joint_limits.velocity.clone()
+        #     velocity_limits_lower = velocity_limits[0].unsqueeze(0).unsqueeze(0) #[1, 1, dof], originally [2, 8]
+        #     velocity_limits_higher = velocity_limits[1].unsqueeze(0).unsqueeze(0)
+        #     #print("velocity_limits", velocity_limits.shape, state_batch.velocity.shape, state_batch.position.shape)
+        #     activation_distance = 0.02 #0.015
+        #     diff_lower = state_batch.velocity - (velocity_limits_lower + activation_distance) #[batch, horizon, dof]
+        #     #print((velocity_limits_lower + activation_distance), (velocity_limits_higher - activation_distance))
+        #     diff_higher = state_batch.velocity - (velocity_limits_higher - activation_distance) #[batch, horizon, dof]
+        #     #activated = (diff_lower < 0.0) | (diff_higher > 0.0)
+        #     #It should be worse the higher magnitude, with diff_lower being negative always
+        #     gradient_creator_lower = (diff_lower * -1) * (diff_lower < 0.0)
+        #     gradient_creator_higher = diff_higher * (diff_higher > 0.0)
+        #     #print("activated shape", activated.shape, gradient_creator.shape, (activated * gradient_creator).shape)
+        #     velocity_limit_cost = torch.sum(gradient_creator_lower + gradient_creator_higher, dim=-1) #[batch, horizon]
+        #     velocity_limit_cost *= 300000 #30000
+        #     #print("velocity limit cost", velocity_limit_cost.mean(), velocity_limit_cost.shape)
+        #     cost_list.append(velocity_limit_cost)
 
         with profiler.record_function("cat_sum"):
             if self.sum_horizon:

@@ -233,7 +233,9 @@ class ArmBase(RolloutBase, ArmBaseConfig):
             ArmBaseConfig.__init__(self, **vars(config))
         RolloutBase.__init__(self)
         self.needed_steps = 32-1-3
-        self.init_pos = torch.zeros(8, device=self.tensor_args.device)
+        self.init_pos_1 = torch.zeros(8, device=self.tensor_args.device)
+        self.init_pos_2 = torch.zeros(8, device=self.tensor_args.device)
+        self.init_pos_3 = torch.zeros(8, device=self.tensor_args.device)
         self._init_after_config_load()
 
     @profiler.record_function("arm_base/init_after_config_load")
@@ -628,8 +630,13 @@ class ArmBase(RolloutBase, ArmBaseConfig):
             # for i in range(self.needed_steps, self.action_horizon):
             #     act_seq.data[:, i, :] = act_2[:, -1, :].detach()
             act_seq.data[:, self.needed_steps:self.action_horizon, :] = act_2[:, -1, :].detach().unsqueeze(1).expand(-1, self.action_horizon - self.needed_steps, -1)
-            mask = self.init_pos.abs().sum().unsqueeze(0).repeat(act_seq.shape[0],8) == 0
-            act_seq.data[:,0,:] = self.init_pos.unsqueeze(0).repeat(act_seq.shape[0], 1) + act_2.data[:,0,:] * mask
+            mask = self.init_pos_1.abs().sum().unsqueeze(0).repeat(act_seq.shape[0],8) == 0
+            #print("act_seq.data", act_seq.data[:,1,:])
+            #print("original", act_seq.data[0,0,:], act_seq.data[0,1,:], "afterwards", self.init_pos_1.unsqueeze(0).repeat(act_seq.shape[0], 1)[0])
+            act_seq.data[:,1,:] = self.init_pos_1.unsqueeze(0).repeat(act_seq.shape[0], 1) + act_2.data[:,1,:] * mask #If its 0, the mask is 1 making it itself
+            act_seq.data[:,2,:] = self.init_pos_2.unsqueeze(0).repeat(act_seq.shape[0], 1) + act_2.data[:,2,:] * mask
+            act_seq.data[:,3,:] = self.init_pos_3.unsqueeze(0).repeat(act_seq.shape[0], 1) + act_2.data[:,3,:] * mask
+            #print("act_seq.data", act_seq.data[:,1,:])
             #print("Time loop took", time.time() - t0)
             #print("act_seq at the point it goes to the last position", act_seq[0, self.needed_steps-3:self.needed_steps+2, :])
 
@@ -638,9 +645,9 @@ class ArmBase(RolloutBase, ArmBaseConfig):
                 self.start_state, act_seq, self._goal_buffer.batch_current_state_idx
             )
 
-#         if act_seq.shape[1] > 1:
-#             print("state seq 0 velocities", state.state_seq.position[0, 0, :])
-#             print("state seq 1 velocities", state.state_seq.position[0, 1, :])
+        # if act_seq.shape[1] > 1:
+        #     print("state seq 0 velocities", state.state_seq.position[0, 0, :])
+        #     print("state seq 0 velocities", state.state_seq.velocity[0, 0, :])
         
         #print("state seq", state.state_seq[0].position) #KinematicModelState
         #print("act seq", act_seq[0])
