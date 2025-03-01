@@ -12,11 +12,13 @@ Heavily front-weight this as once we get to the closet ray it will no longer be 
 
 class RayCost(CostBase):
     def __init__(self, config: CostConfig = None):
-        self.weight = torch.tensor(1.0, device=torch.device("cuda:0"))
+        self.weight = torch.tensor(0.0, device=torch.device("cuda:0"))
         self.tensor_args = TensorDeviceType()
         self.ref_vec = torch.tensor([1, 0, 0], device=torch.device("cuda:0"))
         self.origin = torch.zeros((1, 3), device=torch.device("cuda:0"))
         self.rays = torch.zeros((1, 3), device=torch.device("cuda:0"))
+        self.collision_free_rays = torch.zeros((72, 3), device=torch.device("cuda:0"))
+        self.needed_steps = torch.tensor([0], device=torch.device("cuda:0"))
         CostBase.__init__(self, config)
 
     def look_at_obj_quaternion(self, camera_pos_batch, obj_center):
@@ -301,10 +303,14 @@ class RayCost(CostBase):
         # slack = slack[:, trajectory_divider:]
         # #print("slack shape 2", slack.shape)
         # pos_cost = torch.cat([pos_cost, slack], dim=1) #(batch, trajectory/2) cat (batch, trajectory/2)
-        pos_cost = self.closest_ray_cost(camera_pos_batch, origin, rays)
+        pos_cost_best_ray = self.closest_ray_cost(camera_pos_batch, origin, rays)
+        pos_cost_all_rays = self.closest_ray_cost(camera_pos_batch, origin, self.collision_free_rays) #All the rays
         #pos_scale = self.cost_scaling_very_front_heavy(pos_cost, 2000, 20)
-        pos_cost = pos_cost # * pos_scale
-        #
+        #pos_cost_best_ray[:, self.needed_steps-1] *= 1.0
+        #print("self.needed_steps-1", self.needed_steps-1)
+        pos_cost_best_ray[:, :-1] *= 0.01
+        pos_cost_all_rays[:, -1] *= 0.5
+        pos_cost = pos_cost_best_ray + pos_cost_all_rays
 
         """
         Notes:
@@ -346,7 +352,7 @@ class RayCost(CostBase):
         else:
             pos_cost = pos_cost / max_dist
             final_cost = ori_cost + pos_cost
-            final_cost *= 15000 #20000
+            final_cost *= 2000 #20000
         
         #final_cost = ori_cost
         #final_cost *= 200

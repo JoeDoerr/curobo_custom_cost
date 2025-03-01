@@ -3389,6 +3389,7 @@ class MotionGen(MotionGenConfig):
                 print("type of ik solver opt.rollout_fn", type(opt.rollout_fn))
                 opt.rollout_fn.custom_camera_cost = False
                 opt.rollout_fn.custom_ray_cost = False
+                opt.rollout_fn.ray_cost.weight.copy_(torch.tensor(0.0).to('cuda'))
                 #print(opt.rollout_fn.custom_camera_cost)
         ik_result = self._solve_ik_from_solve_state(
             goal_pose,
