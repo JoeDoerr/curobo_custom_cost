@@ -199,7 +199,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             for i in self.kinematics.link_names:
                 if i != self.kinematics.ee_link:
                     self._link_pose_costs[i] = PoseCost(self.cost_cfg.link_pose_cfg)
-        self.cost_cfg.straight_line_cfg = CostConfig(weight=2.0, vec_weight=1.0, tensor_args=self.tensor_args)
+        self.cost_cfg.straight_line_cfg = CostConfig(weight=1.0, vec_weight=1.0, tensor_args=self.tensor_args)
         if self.cost_cfg.straight_line_cfg is not None:
             self.straight_line_cost = StraightLineCost(self.cost_cfg.straight_line_cfg)
             #self.straight_line_cost.enable_cost()
@@ -406,7 +406,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
         if self.custom_ray_cost == True:
             output_ray_costs = self.ray_cost.forward(camera_pos_batch, camera_quat_batch)
             #output_point_costs = self.point_cost.forward(ee_pos_batch, ee_quat_batch)
-            #print("ray costs", output_ray_costs.mean())
+            print("ray costs", output_ray_costs.mean())
             cost_list.append(output_ray_costs)
             #cost_list.append(output_point_costs)
 

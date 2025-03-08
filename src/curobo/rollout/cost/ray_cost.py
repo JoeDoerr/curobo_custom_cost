@@ -19,7 +19,84 @@ class RayCost(CostBase):
         self.rays = torch.zeros((1, 3), device=torch.device("cuda:0"))
         self.collision_free_rays = torch.zeros((72, 3), device=torch.device("cuda:0"))
         self.needed_steps = torch.tensor([0], device=torch.device("cuda:0"))
+
+        self.cylinders = torch.zeros((20, 72, 3), device=torch.device("cuda:0"))
+        self.radii = torch.zeros((20, 72), device=torch.device("cuda:0"))
+        self.origins = torch.zeros((20, 3), device=torch.device("cuda:0"))
+        self.sigmoid_steepness = torch.tensor([50.0], device=torch.device("cuda:0"))
         CostBase.__init__(self, config)
+
+    #origin to camera pose vector cross product each ray then we only want to be attracted to the closest ray so we do the norm then min
+    def ray_pos_distance(self, camera_pos_batch, origins, rays): #[batch, trajectory, 1, 3], [1, 1, points, 3], [1, points, rays, 3]
+        #Calculate the vector of origin to end effector pos
+        v = camera_pos_batch - origins #(batch, trajectory, points, 3) This is origin to camera pos batch as if i do + origin it will point me to camera_pos_batch
+        #v is [batch, trajectory, points, 3]
+
+        #Cross product each ray against each v (batch, trajectory, points, 1, 3) cross (1, 1, points, rays, 3) = (batch, trajectory, points, rays, 3)
+        #print("camera", v.shape, rays.shape, v.unsqueeze(-2).shape, rays.unsqueeze(0).shape)
+        cross_product = torch.cross(v.unsqueeze(-2), rays.unsqueeze(0).unsqueeze(0), dim=-1) #[batch, trajectory, points, 1, 3) and (1, 1, points, rays, 3)
+        #print("cross product size", cross_product.shape)
+        dist = torch.norm(cross_product, dim=-1) #[batch, trajectory, points, rays]
+        return dist
+
+    #This one does the discrete-aware visibility costs
+    def forward(self, camera_pos_batch, camera_rot_batch, origin = None, rays = None): #rays = [rays, 3], origin=[1, 3]
+        #For each point and for each of those point's rays, (broadcast with [1, 1] in the front) check the straight line distance and the rotation distance
+        #So calculate distances as normal but keep the [batch, trajectory, points, rays, 1] for pos and rot
+        #Then min lowest of 3 on the rays
+        #Then modify if with ranges
+
+        origin = self.origins
+        rays = self.cylinders
+
+        #---------------------Orientation:
+        obj_center = origin.unsqueeze(0).unsqueeze(0) #[1, 1, points, 3] for [batch, trajectory, points, 3]
+        print("obj", obj_center.shape)
+
+        #Desired direction vectors
+        direction_vector_batch = obj_center - camera_pos_batch.unsqueeze(-2) #[1, 1, points, 3] - [batch, trajectory, 1, 3]
+        print("dir", direction_vector_batch.shape)
+        normalized_desired_direction = F.normalize(direction_vector_batch, p=2, dim=-1)
+
+        #Current vector
+        normalized_current_direction = quaternion_to_direction(camera_rot_batch)
+        normalized_current_direction = normalized_current_direction.unsqueeze(-2) #[batch, trajectory, 1, 4]
+
+        #1 - desired vector dot product current vector 
+        #cost = 1.0 - torch.dot(normalized_desired_direction, normalized_current_direction) #If they exactly match up, its 1
+        dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
+        ori_distances = dot_product / 2.0 #best is 0, worst is 2 [batch, trajectory, points]
+        max_ori_distance = 0.1
+        ori_distances -= max_ori_distance
+
+        #---------------------Position
+        pos_distances = self.ray_pos_distance(camera_pos_batch.unsqueeze(-2), obj_center, rays) #[batch, trajectory, points, rays]
+        pos_distances, min_indices = torch.min(pos_distances, dim=-1) #[batch, trajectory, points]
+        max_pos_distance = self.radii.unsqueeze(0).unsqueeze(-1) #[1, 1, points, rays]
+        #print("dists", pos_distances.shape, max_pos_distance.shape, self.radii.shape)
+        pos_distances -= 0.02 #max_pos_distance
+
+        #Now add them together and place into sigmoid
+        #The sigmoid output value should be almost at 0 anywhere inside the maximum
+        total_distances = ori_distances + pos_distances
+        stepped_costs = torch.sigmoid(total_distances * self.sigmoid_steepness)
+        """
+        Each trajectory point in [trajectory, 50] has 50 values. I want to make a truth value for each of the 50 values for if it is satisfying a condition. 
+        Then I want a mask that says true only on the first instance of this index of 50 being true. Everything that doesn't match the condition is also true
+        """
+        condition = stepped_costs <= 0.5 #[batch, trajectory, points] where 0.5 means at the edge of max dist
+        #First instance along the trajectory dimension
+        #Down the dimension it accumulates the values but doesn't collapse the lower dimensions
+        #So cumsum adds a [point] tensor for the first trajectory point, then keeps going and adds the next [50] tensors to it
+        #All of the one values are the first values. There are intermediate 1 values in the accumulation so just do & with the original condition
+        first_true_mask = condition & (condition.cumsum(dim=1) == 1) 
+        final_mask = torch.logical_or(first_true_mask, ~condition) #Where its not true its fine to have gradients
+        stepped_costs = stepped_costs[final_mask]
+
+        final_cost = torch.sum(stepped_costs, dim=-1) #[batch, trajectory]
+        final_cost *= 2000.0
+
+        return final_cost.float() * self.weight
 
     def look_at_obj_quaternion(self, camera_pos_batch, obj_center):
         #print("camera pos batch shape", camera_pos_batch.shape, obj_center.shape) #[batch, trajectory_points, 3], [1, 1, 3]
@@ -263,7 +340,7 @@ class RayCost(CostBase):
 
         return min_values #This is just the dist to the closest ray point
 
-    def forward(self, camera_pos_batch, camera_rot_batch, origin = None, rays = None): #rays = [rays, 3], origin=[1, 3]
+    def forward_older(self, camera_pos_batch, camera_rot_batch, origin = None, rays = None): #rays = [rays, 3], origin=[1, 3]
         origin = self.origin
         rays = self.rays
 
