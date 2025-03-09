@@ -12,7 +12,7 @@ Heavily front-weight this as once we get to the closet ray it will no longer be 
 
 class RayCost(CostBase):
     def __init__(self, config: CostConfig = None):
-        self.weight = torch.tensor(0.0, device=torch.device("cuda:0"))
+        self.weight = torch.tensor(1.0, device=torch.device("cuda:0"))
         self.tensor_args = TensorDeviceType()
         self.ref_vec = torch.tensor([1, 0, 0], device=torch.device("cuda:0"))
         self.origin = torch.zeros((1, 3), device=torch.device("cuda:0"))
@@ -51,11 +51,11 @@ class RayCost(CostBase):
 
         #---------------------Orientation:
         obj_center = origin.unsqueeze(0).unsqueeze(0) #[1, 1, points, 3] for [batch, trajectory, points, 3]
-        print("obj", obj_center.shape)
+        #print("obj", obj_center.shape)
 
         #Desired direction vectors
         direction_vector_batch = obj_center - camera_pos_batch.unsqueeze(-2) #[1, 1, points, 3] - [batch, trajectory, 1, 3]
-        print("dir", direction_vector_batch.shape)
+        #print("dir", direction_vector_batch.shape)
         normalized_desired_direction = F.normalize(direction_vector_batch, p=2, dim=-1)
 
         #Current vector
@@ -71,30 +71,43 @@ class RayCost(CostBase):
 
         #---------------------Position
         pos_distances = self.ray_pos_distance(camera_pos_batch.unsqueeze(-2), obj_center, rays) #[batch, trajectory, points, rays]
-        pos_distances, min_indices = torch.min(pos_distances, dim=-1) #[batch, trajectory, points]
-        max_pos_distance = self.radii.unsqueeze(0).unsqueeze(-1) #[1, 1, points, rays]
+        pos_distances, min_indices = torch.min(pos_distances, dim=-1) #[batch, trajectory, points], min_indices is just the reduced dim min is over
+        max_pos_distance = self.radii.unsqueeze(0).unsqueeze(0).repeat(min_indices.shape[0], min_indices.shape[1], 1, 1) #[points, rays] -> [batch, trajectory, points, rays]
+        max_pos_distance = torch.gather(max_pos_distance, dim=-1, index=min_indices.unsqueeze(-1)).squeeze(-1) #[batch, trajectory, points]
+        print("Max pos distance", max_pos_distance.shape)
         #print("dists", pos_distances.shape, max_pos_distance.shape, self.radii.shape)
-        pos_distances -= 0.02 #max_pos_distance
+        pos_distances -= max_pos_distance
+        #print("pos", pos_distances.shape)
 
         #Now add them together and place into sigmoid
         #The sigmoid output value should be almost at 0 anywhere inside the maximum
         total_distances = ori_distances + pos_distances
-        stepped_costs = torch.sigmoid(total_distances * self.sigmoid_steepness)
+        print("total distances", total_distances[0, 0])
+        stepped_costs = torch.sigmoid(total_distances * self.sigmoid_steepness) #[batch, trajectory, points]
+        #print("stepepsed", stepped_costs.shape)
         """
         Each trajectory point in [trajectory, 50] has 50 values. I want to make a truth value for each of the 50 values for if it is satisfying a condition. 
         Then I want a mask that says true only on the first instance of this index of 50 being true. Everything that doesn't match the condition is also true
         """
+        print("stepped costs", stepped_costs[0, 0])
         condition = stepped_costs <= 0.5 #[batch, trajectory, points] where 0.5 means at the edge of max dist
         #First instance along the trajectory dimension
         #Down the dimension it accumulates the values but doesn't collapse the lower dimensions
         #So cumsum adds a [point] tensor for the first trajectory point, then keeps going and adds the next [50] tensors to it
         #All of the one values are the first values. There are intermediate 1 values in the accumulation so just do & with the original condition
-        first_true_mask = condition & (condition.cumsum(dim=1) == 1) 
+        first_true_mask = condition & (condition.cumsum(dim=1) == 1)
+        #print("fist", first_true_mask.shape)
         final_mask = torch.logical_or(first_true_mask, ~condition) #Where its not true its fine to have gradients
-        stepped_costs = stepped_costs[final_mask]
+        #print("final mask", final_mask.shape)
+        stepped_costs = torch.where(final_mask, stepped_costs, 0)
+        print("stepped costs afterwards", stepped_costs[0, 0])
+        #print("stepepsed2", stepped_costs.shape) #[16000]
 
         final_cost = torch.sum(stepped_costs, dim=-1) #[batch, trajectory]
+        #print("fincos", final_cost.shape)
         final_cost *= 2000.0
+
+        print("weight", self.weight)
 
         return final_cost.float() * self.weight
 

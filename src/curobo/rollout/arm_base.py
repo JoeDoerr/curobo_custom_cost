@@ -236,7 +236,7 @@ class ArmBase(RolloutBase, ArmBaseConfig):
         self.init_pos_1 = torch.zeros(8, device=self.tensor_args.device)
         self.init_pos_2 = torch.zeros(8, device=self.tensor_args.device)
         self.init_pos_3 = torch.zeros(8, device=self.tensor_args.device)
-        self.copy_last_action = torch.tensor([1.0], device=self.tensor_args.device)
+        self.copy_last_action = torch.tensor([0.0], device=self.tensor_args.device)
         self._init_after_config_load()
 
     @profiler.record_function("arm_base/init_after_config_load")
