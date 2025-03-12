@@ -20,15 +20,18 @@ class RayCost(CostBase):
         self.collision_free_rays = torch.zeros((72, 3), device=torch.device("cuda:0"))
         self.needed_steps = torch.tensor([0], device=torch.device("cuda:0"))
 
-        self.cylinders = torch.zeros((20, 72, 3), device=torch.device("cuda:0"))
-        self.radii = torch.zeros((20, 72), device=torch.device("cuda:0"))
-        self.origins = torch.zeros((20, 3), device=torch.device("cuda:0"))
-        self.sigmoid_steepness = torch.tensor([50.0], device=torch.device("cuda:0"))
+        num_origins=10
+        self.cylinders = torch.zeros((num_origins, 72, 3), device=torch.device("cuda:0"), requires_grad=False)
+        self.radii = torch.zeros((num_origins, 72), device=torch.device("cuda:0"))
+        self.origins = torch.zeros((num_origins, 3), device=torch.device("cuda:0"), requires_grad=False)
+        self.sigmoid_steepness = torch.tensor([350.0], device=torch.device("cuda:0"))
+        self.attractor_decay = torch.tensor([1.0], device=torch.device("cuda:0"))
         CostBase.__init__(self, config)
 
     #origin to camera pose vector cross product each ray then we only want to be attracted to the closest ray so we do the norm then min
     def ray_pos_distance(self, camera_pos_batch, origins, rays): #[batch, trajectory, 1, 3], [1, 1, points, 3], [1, points, rays, 3]
         #Calculate the vector of origin to end effector pos
+        #print("cam", camera_pos_batch.shape, origins.shape)
         v = camera_pos_batch - origins #(batch, trajectory, points, 3) This is origin to camera pos batch as if i do + origin it will point me to camera_pos_batch
         #v is [batch, trajectory, points, 3]
 
@@ -40,76 +43,118 @@ class RayCost(CostBase):
         return dist
 
     #This one does the discrete-aware visibility costs
-    def forward(self, camera_pos_batch, camera_rot_batch, origin = None, rays = None): #rays = [rays, 3], origin=[1, 3]
+    def forward(self, camera_pos_batch, camera_rot_batch): #rays = [rays, 3], origin=[1, 3]
         #For each point and for each of those point's rays, (broadcast with [1, 1] in the front) check the straight line distance and the rotation distance
         #So calculate distances as normal but keep the [batch, trajectory, points, rays, 1] for pos and rot
         #Then min lowest of 3 on the rays
         #Then modify if with ranges
 
-        origin = self.origins
+        origins = self.origins
         rays = self.cylinders
 
         #---------------------Orientation:
-        obj_center = origin.unsqueeze(0).unsqueeze(0) #[1, 1, points, 3] for [batch, trajectory, points, 3]
-        #print("obj", obj_center.shape)
+        # obj_center = origin.unsqueeze(0).unsqueeze(0) #[1, 1, points, 3] for [batch, trajectory, points, 3]
+        # #print("obj", obj_center.shape)
 
-        #Desired direction vectors
-        direction_vector_batch = obj_center - camera_pos_batch.unsqueeze(-2) #[1, 1, points, 3] - [batch, trajectory, 1, 3]
-        #print("dir", direction_vector_batch.shape)
-        normalized_desired_direction = F.normalize(direction_vector_batch, p=2, dim=-1)
+        # #Desired direction vectors
+        # direction_vector_batch = obj_center - camera_pos_batch.unsqueeze(-2) #[1, 1, points, 3] - [batch, trajectory, 1, 3]
+        # #print("dir", direction_vector_batch.shape)
+        # normalized_desired_direction = F.normalize(direction_vector_batch, p=2, dim=-1)
+        normalized_desired_direction = -1.0 * rays.unsqueeze(0).unsqueeze(0) #[1, 1, points, rays, 3]
 
         #Current vector
         normalized_current_direction = quaternion_to_direction(camera_rot_batch)
-        normalized_current_direction = normalized_current_direction.unsqueeze(-2) #[batch, trajectory, 1, 4]
+        normalized_current_direction = normalized_current_direction.unsqueeze(-2).unsqueeze(-2) #[batch, trajectory, 1, 1, 3]
+        #print("desired orientation shapes", normalized_desired_direction.shape, normalized_current_direction.shape)
 
-        #1 - desired vector dot product current vector 
+        #1 - desired vector dot product current vector
         #cost = 1.0 - torch.dot(normalized_desired_direction, normalized_current_direction) #If they exactly match up, its 1
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
-        ori_distances = dot_product / 2.0 #best is 0, worst is 2 [batch, trajectory, points]
-        max_ori_distance = 0.1
-        ori_distances -= max_ori_distance
+        ori_distances = dot_product / 2.0 #best is 0, worst is 2 [batch, trajectory, points, rays]
+        """
+        10 Degrees is 0.984 for the dot product where then (1-0.984) / 2 = 0.00759
+        350 steepness sigmoid is from the middle to the outsides is 0.018 which means leeway = 0.00759 + 0.018 too much
+        1000 steepness sigmoid is 0.003 which makes leeway = 0.00759 + 0.003 which is something around 15 degrees
+        """
+        original_ori_distances = ori_distances
+        max_ori_distance = 0.00759
+        #print("ori distances1", ori_distances[0, 0], ori_distances.shape)
+        ori_distances = ori_distances - max_ori_distance #Need to make sure this is not -= as that will be an in place modification to the pointer of ori_distances which original is set to
+        ori_distances = torch.sigmoid(ori_distances * 1000.0) #[batch, trajectory, points, rays]
+        #print("ori", ori_distances.shape)
 
         #---------------------Position
-        pos_distances = self.ray_pos_distance(camera_pos_batch.unsqueeze(-2), obj_center, rays) #[batch, trajectory, points, rays]
-        pos_distances, min_indices = torch.min(pos_distances, dim=-1) #[batch, trajectory, points], min_indices is just the reduced dim min is over
-        max_pos_distance = self.radii.unsqueeze(0).unsqueeze(0).repeat(min_indices.shape[0], min_indices.shape[1], 1, 1) #[points, rays] -> [batch, trajectory, points, rays]
-        max_pos_distance = torch.gather(max_pos_distance, dim=-1, index=min_indices.unsqueeze(-1)).squeeze(-1) #[batch, trajectory, points]
-        print("Max pos distance", max_pos_distance.shape)
+        pos_distances = self.ray_pos_distance(camera_pos_batch.unsqueeze(-2), origins.unsqueeze(0).unsqueeze(0), rays) #[batch, trajectory, points, rays]
+        original_pos_distances = pos_distances
+        #pos_distances, min_indices = torch.min(pos_distances, dim=-1) #[batch, trajectory, points], min_indices is just the reduced dim min is over
+        max_pos_distance = self.radii.unsqueeze(0).unsqueeze(0).repeat(pos_distances.shape[0], pos_distances.shape[1], 1, 1) #[points, rays] -> [batch, trajectory, points, rays]
+        #max_pos_distance = torch.gather(max_pos_distance, dim=-1, index=min_indices.unsqueeze(-1)).squeeze(-1) #[batch, trajectory, points]
+        #print("Max pos distance", max_pos_distance.shape)
         #print("dists", pos_distances.shape, max_pos_distance.shape, self.radii.shape)
-        pos_distances -= max_pos_distance
+        #print("pos distances1", pos_distances[0, 0], max_pos_distance[0, 0])
+        """
+        The radius as a max distance is fine for the maximum distance with a tiny bit
+        The minimum radius is 0.02 for the steepness, where sigmoid steepness 500 is 0.005 is one fourth the leeway
+        """
+        pos_distances = pos_distances - (max_pos_distance * 0.9) #Need to make sure this is not -= as that will be an in place modification to the pointer of pos_distances which original is set to
+        pos_distances = torch.sigmoid(pos_distances * 500.0) #Changing the sigmoid steepness will make the ori and pos easier to get gradients
         #print("pos", pos_distances.shape)
 
-        #Now add them together and place into sigmoid
-        #The sigmoid output value should be almost at 0 anywhere inside the maximum
-        total_distances = ori_distances + pos_distances
-        print("total distances", total_distances[0, 0])
-        stepped_costs = torch.sigmoid(total_distances * self.sigmoid_steepness) #[batch, trajectory, points]
+        #---------------------Mask out values where not both pos and rotation fit
+        total_distance_mask = torch.max(ori_distances, pos_distances) < 0.99 #[batch, trajectory, points] where all that is false will be set to 0 which is when no rate of change
+        total_costs = ori_distances + pos_distances
+        total_costs = total_costs * total_distance_mask #IMPORTANT: The only pos and ori pairs that have change is when both are lower than 0.99 output from sigmoid
+        high_cost_mask = total_costs != 0.0
+        total_costs = torch.where(high_cost_mask, total_costs, 1.0)
+
+        #print("total distances", total_costs[0, 0], pos_distances[0, 0])
+        #stepped_costs = torch.sigmoid(total_distances * self.sigmoid_steepness) #[batch, trajectory, points]
         #print("stepepsed", stepped_costs.shape)
         """
         Each trajectory point in [trajectory, 50] has 50 values. I want to make a truth value for each of the 50 values for if it is satisfying a condition. 
         Then I want a mask that says true only on the first instance of this index of 50 being true. Everything that doesn't match the condition is also true
         """
-        print("stepped costs", stepped_costs[0, 0])
-        condition = stepped_costs <= 0.5 #[batch, trajectory, points] where 0.5 means at the edge of max dist
+        #print("stepped costs", stepped_costs[0, 0])
+
+        #---------------------Only count points once in the trajectory
+        #For each point, find if there is a joined distance for all of its rays for that point close enough to have been seen
+        min_pos_dist, _ = torch.min(pos_distances, dim=-1) #[batch, trajectory, points]
+        min_ori_dist, _ = torch.min(ori_distances, dim=-1) #[batch, trajectory, points]
+        condition = torch.max(min_ori_dist, min_pos_dist) <= 0.5 #[batch, trajectory, points] where 0.5 means at the edge of max dist, so both in threshold
         #First instance along the trajectory dimension
         #Down the dimension it accumulates the values but doesn't collapse the lower dimensions
         #So cumsum adds a [point] tensor for the first trajectory point, then keeps going and adds the next [50] tensors to it
         #All of the one values are the first values. There are intermediate 1 values in the accumulation so just do & with the original condition
         first_true_mask = condition & (condition.cumsum(dim=1) == 1)
         #print("fist", first_true_mask.shape)
-        final_mask = torch.logical_or(first_true_mask, ~condition) #Where its not true its fine to have gradients
+        final_mask = torch.logical_or(first_true_mask, ~condition) #[batch, trajectory, points] Where its not true its fine to have gradients
         #print("final mask", final_mask.shape)
-        stepped_costs = torch.where(final_mask, stepped_costs, 0)
-        print("stepped costs afterwards", stepped_costs[0, 0])
+        final_mask = final_mask.unsqueeze(-1).repeat(1, 1, 1, total_costs.shape[-1])
+        total_costs = torch.where(final_mask, total_costs, 0)
+        #print("stepped costs afterwards", stepped_costs[0, 0])
         #print("stepepsed2", stepped_costs.shape) #[16000]
 
-        final_cost = torch.sum(stepped_costs, dim=-1) #[batch, trajectory]
+        #print("totalcostshape", total_costs.shape) #Up to here it still is doing each ray
+        
+        #---------------------Removing meant-to-be removed too small radius rays
+        # remove_mask = total_distances < 90 #True keep
+        # total_costs = torch.where(remove_mask, total_costs, 0) #Where its false is set to 0
+
+        #---------------------Smooth attractor addition
+        smooth_attractors = original_ori_distances + original_pos_distances
+        smooth_attractors = torch.where(final_mask, smooth_attractors, 0) #Temporal removing from sigmoid knowledge #[batch, trajectory, points, rays]
+        smooth_attractor_sum = torch.sum(smooth_attractors, dim=-1).sum(dim=-1) #[batch, trajectory]
+        smooth_attractor_sum = smooth_attractor_sum * self.attractor_decay
+        #self.attractor_decay *= 0.9
+
+        final_cost = torch.sum(total_costs, dim=-1).sum(dim=-1) #[batch, trajectory] #This sum should have large difference with 1 seen and less with more seen
+        final_cost += smooth_attractor_sum
         #print("fincos", final_cost.shape)
-        final_cost *= 2000.0
+        final_cost *= 2.0
 
-        print("weight", self.weight)
+        #print("weight", self.weight)
 
-        return final_cost.float() * self.weight
+        return final_cost.float()# * self.weight
 
     def look_at_obj_quaternion(self, camera_pos_batch, obj_center):
         #print("camera pos batch shape", camera_pos_batch.shape, obj_center.shape) #[batch, trajectory_points, 3], [1, 1, 3]

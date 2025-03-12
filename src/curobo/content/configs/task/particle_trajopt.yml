@@ -182,7 +182,7 @@ cost:
 
 
 mppi:
-  init_cov          : 0.5
+  init_cov          : 2.5 #0.5
   gamma             : 1.0
   n_iters           : 2
   cold_start_n_iters: null
@@ -190,7 +190,7 @@ mppi:
   step_size_cov     : 0.01
   beta              : 0.01
   alpha             : 1
-  num_particles     : 25 # 100
+  num_particles     : 50 # 100
   update_cov        : True
   cov_type          : "DIAG_A" #
   kappa             : 0.001

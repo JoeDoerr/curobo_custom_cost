@@ -228,6 +228,8 @@ class NewtonOptBase(Optimizer, NewtonOptConfig):
         x_in = x_n.view(
             self.n_problems * self.num_particles, self.action_horizon, self.rollout_fn.d_action
         )
+        self.rollout_fn.ray_cost.attractor_decay.copy_(self.rollout_fn.ray_cost.attractor_decay * 0.0) #---------------------------------------------------CUSTOM
+        #print("self.rollout_fn.ray_cost.attractor_decay", self.rollout_fn.ray_cost.attractor_decay)
         trajectories = self.rollout_fn(x_in)  # x_n = (batch*line_search_scale) x horizon x d_action
         if len(trajectories.costs.shape) == 2:
             cost = torch.sum(

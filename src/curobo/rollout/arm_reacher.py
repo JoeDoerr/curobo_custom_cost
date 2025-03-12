@@ -405,8 +405,9 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             #cost_list.append(dists)
         if self.custom_ray_cost == True:
             output_ray_costs = self.ray_cost.forward(camera_pos_batch, camera_quat_batch)
+            #self.ray_cost.attractor_decay *= 0.9
             #output_point_costs = self.point_cost.forward(ee_pos_batch, ee_quat_batch)
-            print("ray costs", output_ray_costs.mean())
+            #print("ray costs", output_ray_costs.mean())
             cost_list.append(output_ray_costs)
             #cost_list.append(output_point_costs)
 

@@ -3386,7 +3386,7 @@ class MotionGen(MotionGenConfig):
                 #     except Exception as e:
                 #         # Handle any potential errors in getattr
                 #         print(f"Could not access attribute {attr_name}: {e}")
-                print("type of ik solver opt.rollout_fn", type(opt.rollout_fn))
+                print("[motion_gen.py] type of ik solver opt.rollout_fn", type(opt.rollout_fn))
                 opt.rollout_fn.custom_camera_cost = False
                 opt.rollout_fn.custom_ray_cost = False
                 #opt.rollout_fn.ray_cost.weight.copy_(torch.tensor(0.0).to('cuda'))
@@ -3635,11 +3635,11 @@ class MotionGen(MotionGenConfig):
                 #self.rospy_communication_custom()
                 print("time communication took", time.time() - t0)
 
-                for opt in self.trajopt_solver.solver.optimizers:
-                    opt.rollout_fn.custom_bound_cost = True
-                for opt in self.finetune_trajopt_solver.solver.optimizers:
-                    opt.rollout_fn.custom_bound_cost = True
-
+                # for opt in self.trajopt_solver.solver.optimizers:
+                #     opt.rollout_fn.custom_bound_cost = True
+                # for opt in self.finetune_trajopt_solver.solver.optimizers:
+                #     opt.rollout_fn.custom_bound_cost = True
+                
                 traj_result = self._solve_trajopt_from_solve_state(
                     goal,
                     solve_state,
