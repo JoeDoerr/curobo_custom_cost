@@ -974,6 +974,9 @@ class MotionGenPlanConfig:
     #: :meth:`curobo.types.robot.RobotConfig.kinematics.kinematics_config.retract_config`
     use_start_state_as_retract: bool = True
 
+    #: [CUSTOM] use a custom state for bias TrajOpt initialization
+    custom_bias_state: JointState = None
+
     #: Use a custom pose cost metric for trajectory optimization. This is useful for adding
     #: additional constraints to motion generation, such as constraining the end-effector's motion
     #: to a plane or a line or hold orientation while moving. This is also useful for only reaching
@@ -3478,6 +3481,8 @@ class MotionGen(MotionGenConfig):
                 retract_config = None
                 if plan_config.use_start_state_as_retract:
                     retract_config = start_state.position.clone()
+                if plan_config.custom_bias_state:
+                    retract_config = plan_config.custom_bias_state.clone()
                 goal = Goal(
                     goal_pose=goal_pose,
                     current_state=start_state,
