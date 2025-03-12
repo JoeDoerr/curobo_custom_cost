@@ -53,14 +53,14 @@ class RayCost(CostBase):
         rays = self.cylinders
 
         #---------------------Orientation:
-        # obj_center = origin.unsqueeze(0).unsqueeze(0) #[1, 1, points, 3] for [batch, trajectory, points, 3]
+        obj_center = origins.unsqueeze(0).unsqueeze(0) #[1, 1, points, 3] for [batch, trajectory, points, 3]
         # #print("obj", obj_center.shape)
 
         # #Desired direction vectors
-        # direction_vector_batch = obj_center - camera_pos_batch.unsqueeze(-2) #[1, 1, points, 3] - [batch, trajectory, 1, 3]
+        direction_vector_batch = obj_center - camera_pos_batch.unsqueeze(-2) #[1, 1, points, 3] - [batch, trajectory, 1, 3]
         # #print("dir", direction_vector_batch.shape)
-        # normalized_desired_direction = F.normalize(direction_vector_batch, p=2, dim=-1)
-        normalized_desired_direction = -1.0 * rays.unsqueeze(0).unsqueeze(0) #[1, 1, points, rays, 3]
+        normalized_desired_direction = F.normalize(direction_vector_batch, p=2, dim=-1).unsqueeze(-2) #[batch, trajectory, points, 1(rays), 3]
+        #normalized_desired_direction = -1.0 * rays.unsqueeze(0).unsqueeze(0) #[1, 1, points, rays, 3]
 
         #Current vector
         normalized_current_direction = quaternion_to_direction(camera_rot_batch)
@@ -70,7 +70,7 @@ class RayCost(CostBase):
         #1 - desired vector dot product current vector
         #cost = 1.0 - torch.dot(normalized_desired_direction, normalized_current_direction) #If they exactly match up, its 1
         dot_product = 1.0 - torch.sum(normalized_desired_direction * normalized_current_direction, dim=-1) #-1 to 1, so best is 0, worst is 2
-        ori_distances = dot_product / 2.0 #best is 0, worst is 2 [batch, trajectory, points, rays]
+        ori_distances = dot_product / 2.0 #best is 0, worst is 2 [batch, trajectory, points, 1]
         """
         10 Degrees is 0.984 for the dot product where then (1-0.984) / 2 = 0.00759
         350 steepness sigmoid is from the middle to the outsides is 0.018 which means leeway = 0.00759 + 0.018 too much
@@ -79,8 +79,8 @@ class RayCost(CostBase):
         original_ori_distances = ori_distances
         max_ori_distance = 0.00759
         #print("ori distances1", ori_distances[0, 0], ori_distances.shape)
-        ori_distances = ori_distances - max_ori_distance #Need to make sure this is not -= as that will be an in place modification to the pointer of ori_distances which original is set to
-        ori_distances = torch.sigmoid(ori_distances * 1000.0) #[batch, trajectory, points, rays]
+        ori_distances_check = ori_distances - max_ori_distance #Need to make sure this is not -= as that will be an in place modification to the pointer of ori_distances which original is set to
+        ori_distances_check = torch.sigmoid(ori_distances_check * 1000.0) #[batch, trajectory, points, rays]
         #print("ori", ori_distances.shape)
 
         #---------------------Position
@@ -96,16 +96,20 @@ class RayCost(CostBase):
         The radius as a max distance is fine for the maximum distance with a tiny bit
         The minimum radius is 0.02 for the steepness, where sigmoid steepness 500 is 0.005 is one fourth the leeway
         """
-        pos_distances = pos_distances - (max_pos_distance * 0.9) #Need to make sure this is not -= as that will be an in place modification to the pointer of pos_distances which original is set to
-        pos_distances = torch.sigmoid(pos_distances * 500.0) #Changing the sigmoid steepness will make the ori and pos easier to get gradients
-        #print("pos", pos_distances.shape)
+        pos_distances_check = pos_distances - (max_pos_distance * 0.9) #Need to make sure this is not -= as that will be an in place modification to the pointer of pos_distances which original is set to
+        pos_distances_check = torch.sigmoid(pos_distances_check * 500.0) #Changing the sigmoid steepness will make the ori and pos easier to get gradients
+        lowest_val, _ = torch.min(pos_distances, dim=-1)
+        lowest_val, _ = torch.min(lowest_val, dim=-1)
+        lowest_val2, _ = torch.min(ori_distances, dim=-1)
+        lowest_val2, _ = torch.min(lowest_val2, dim=-1)
+        print("pos", lowest_val[0, :], "ori", lowest_val2[0, :]) #Across points on a trajectory
 
         #---------------------Mask out values where not both pos and rotation fit
-        total_distance_mask = torch.max(ori_distances, pos_distances) < 0.99 #[batch, trajectory, points] where all that is false will be set to 0 which is when no rate of change
+        # total_distance_mask = torch.max(ori_distances, pos_distances) < 0.99 #[batch, trajectory, points] where all that is false will be set to 0 which is when no rate of change
         total_costs = ori_distances + pos_distances
-        total_costs = total_costs * total_distance_mask #IMPORTANT: The only pos and ori pairs that have change is when both are lower than 0.99 output from sigmoid
-        high_cost_mask = total_costs != 0.0
-        total_costs = torch.where(high_cost_mask, total_costs, 1.0)
+        # total_costs = total_costs * total_distance_mask #IMPORTANT: The only pos and ori pairs that have change is when both are lower than 0.99 output from sigmoid
+        # high_cost_mask = total_costs != 0.0
+        # total_costs = torch.where(high_cost_mask, total_costs, 1.0)
 
         #print("total distances", total_costs[0, 0], pos_distances[0, 0])
         #stepped_costs = torch.sigmoid(total_distances * self.sigmoid_steepness) #[batch, trajectory, points]
@@ -118,8 +122,8 @@ class RayCost(CostBase):
 
         #---------------------Only count points once in the trajectory
         #For each point, find if there is a joined distance for all of its rays for that point close enough to have been seen
-        min_pos_dist, _ = torch.min(pos_distances, dim=-1) #[batch, trajectory, points]
-        min_ori_dist, _ = torch.min(ori_distances, dim=-1) #[batch, trajectory, points]
+        min_pos_dist, _ = torch.min(pos_distances_check, dim=-1) #[batch, trajectory, points]
+        min_ori_dist, _ = torch.min(ori_distances_check, dim=-1) #[batch, trajectory, points]
         condition = torch.max(min_ori_dist, min_pos_dist) <= 0.5 #[batch, trajectory, points] where 0.5 means at the edge of max dist, so both in threshold
         #First instance along the trajectory dimension
         #Down the dimension it accumulates the values but doesn't collapse the lower dimensions
@@ -141,16 +145,18 @@ class RayCost(CostBase):
         # total_costs = torch.where(remove_mask, total_costs, 0) #Where its false is set to 0
 
         #---------------------Smooth attractor addition
-        smooth_attractors = original_ori_distances + original_pos_distances
-        smooth_attractors = torch.where(final_mask, smooth_attractors, 0) #Temporal removing from sigmoid knowledge #[batch, trajectory, points, rays]
-        smooth_attractor_sum = torch.sum(smooth_attractors, dim=-1).sum(dim=-1) #[batch, trajectory]
-        smooth_attractor_sum = smooth_attractor_sum * self.attractor_decay
+        # smooth_attractors = original_ori_distances + original_pos_distances
+        # smooth_attractors = torch.where(final_mask, smooth_attractors, 0) #Temporal removing from sigmoid knowledge #[batch, trajectory, points, rays]
+        # smooth_attractors, _ = torch.min(smooth_attractors, dim=-1) #lowest distance ray
+        # smooth_attractor_sum = torch.sum(smooth_attractors, dim=-1) #[batch, trajectory]
+        # smooth_attractor_sum = smooth_attractor_sum * 0.0 #self.attractor_decay
         #self.attractor_decay *= 0.9
 
-        final_cost = torch.sum(total_costs, dim=-1).sum(dim=-1) #[batch, trajectory] #This sum should have large difference with 1 seen and less with more seen
-        final_cost += smooth_attractor_sum
+        final_cost, _ = torch.min(total_costs, dim=-1) #[batch, trajectory, points, rays] result = [batch, trajectory, points]
+        final_cost = torch.sum(final_cost, dim=-1) #[batch, trajectory] #This sum should have large difference with 1 seen and less with more seen
+        #final_cost += smooth_attractor_sum
         #print("fincos", final_cost.shape)
-        final_cost *= 2.0
+        final_cost *= 500.0
 
         #print("weight", self.weight)
 
