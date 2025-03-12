@@ -673,6 +673,7 @@ class TrajOptSolver(TrajOptSolverConfig):
         self._interpolated_traj_buffer = None
         self._kin_list = None
         self._rollout_list = None
+        self.custom_seed = torch.zeros(1, self.action_horizon, self.dof, device=self.tensor_args.device)
 
     def get_all_rollout_instances(self) -> List[RolloutBase]:
         """Get all rollout instances in the solver.
@@ -1544,9 +1545,18 @@ class TrajOptSolver(TrajOptSolverConfig):
         end_q = goal_state.position.view(-1, 1, self.dof)
         edges = torch.cat((start_q, end_q), dim=1)
 
-        seed = self.delta_vec @ edges
+        if torch.count_nonzero(self.custom_seed) > 0:
+            batch = goal_state.shape[0]
+            seed = self.custom_seed.repeat(batch, 1, 1)
+        else:
+            seed = self.delta_vec @ edges
+
+        # print('Goal shape', goal_state.shape)
+        # print('Desired Shape', (self.delta_vec @ edges).shape)
+        # print('Seed Shape', seed.shape)
 
         # Setting final state to end_q explicitly to avoid matmul numerical precision issues.
+        seed[...,  0:, :] = start_q
         seed[..., -1:, :] = end_q
 
         return seed
