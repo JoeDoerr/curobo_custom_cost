@@ -653,6 +653,7 @@ class TrajOptSolver(TrajOptSolverConfig):
         self.waypoint_delta_vec = interpolate_kernel(
             3, int(self.action_horizon / 2), self.tensor_args
         ).unsqueeze(0)
+        #print("[trajopt.py]-----------------------------------------------------------self.waypointdeltavec", self.waypoint_delta_vec)
         assert self.action_horizon / 2 != 0.0
         self.solver.update_nproblems(self.num_seeds)
         self._max_joint_vel = self.solver.safety_rollout.state_bounds.velocity.view(2, self.dof)[

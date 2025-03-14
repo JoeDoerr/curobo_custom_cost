@@ -12,7 +12,7 @@ Heavily front-weight this as once we get to the closet ray it will no longer be 
 
 class RayCost(CostBase):
     def __init__(self, config: CostConfig = None):
-        ray_num=60
+        ray_num=80
         self.weight = torch.tensor(1.0, device=torch.device("cuda:0"))
         self.tensor_args = TensorDeviceType()
         self.ref_vec = torch.tensor([1, 0, 0], device=torch.device("cuda:0"))
@@ -97,6 +97,9 @@ class RayCost(CostBase):
         pos_distances = self.ray_pos_distance(camera_pos_batch.unsqueeze(-2), origins.unsqueeze(0).unsqueeze(0), rays) #[batch, trajectory, points, rays]
         
         total_costs = ori_distances + pos_distances
+        messed_up_radii = self.radii.unsqueeze(0).unsqueeze(0).repeat(pos_distances.shape[0], pos_distances.shape[1], 1, 1) #[batch, trajectories, points, rays]
+        mask_radii = messed_up_radii > 0 #true if cf
+        total_costs = torch.where(mask_radii, total_costs, 10.0)
 
         final_cost_points, _ = torch.min(total_costs, dim=-1) #[batch, trajectory, points, rays] result = [batch, trajectory, points]
         final_cost, _ = torch.min(final_cost_points, dim=-1) #[batch, trajectory, points] result = [batch, trajectory]
