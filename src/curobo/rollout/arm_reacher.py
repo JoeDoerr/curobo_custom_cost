@@ -332,7 +332,7 @@ class ArmReacher(ArmBase, ArmReacherConfig):
             st_cost = self.straight_line_cost.forward(ee_pos_batch)
             # print("straight_line_cost", st_cost.mean())
             #print("straight_line_cost", st_cost.mean(), st_cost.shape) #When we are barely moving straight line cost is 2.8 so maybe in the 0-5 region
-            cost_list.append(st_cost)
+            #cost_list.append(st_cost)
             #st_cost_mean = st_cost.mean()
             #roc = 1000.0
             #self.scale_up_collision_cost_when_stuck += roc * ((st_cost_mean < 10.0) & (self.scale_up_collision_cost_when_stuck < 20000.0)).float()

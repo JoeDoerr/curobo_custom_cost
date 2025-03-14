@@ -12,17 +12,18 @@ Heavily front-weight this as once we get to the closet ray it will no longer be 
 
 class RayCost(CostBase):
     def __init__(self, config: CostConfig = None):
+        ray_num=60
         self.weight = torch.tensor(1.0, device=torch.device("cuda:0"))
         self.tensor_args = TensorDeviceType()
         self.ref_vec = torch.tensor([1, 0, 0], device=torch.device("cuda:0"))
         self.origin = torch.zeros((1, 3), device=torch.device("cuda:0"))
         self.rays = torch.zeros((1, 3), device=torch.device("cuda:0"))
-        self.collision_free_rays = torch.zeros((72, 3), device=torch.device("cuda:0"))
+        self.collision_free_rays = torch.zeros((ray_num, 3), device=torch.device("cuda:0"))
         self.needed_steps = torch.tensor([0], device=torch.device("cuda:0"))
 
-        num_origins=1
-        self.cylinders = torch.zeros((num_origins, 72, 3), device=torch.device("cuda:0"), requires_grad=False)
-        self.radii = torch.zeros((num_origins, 72), device=torch.device("cuda:0"))
+        num_origins=10
+        self.cylinders = torch.zeros((num_origins, ray_num, 3), device=torch.device("cuda:0"), requires_grad=False)
+        self.radii = torch.zeros((num_origins, ray_num), device=torch.device("cuda:0"))
         self.origins = torch.zeros((num_origins, 3), device=torch.device("cuda:0"), requires_grad=False)
         self.sigmoid_steepness = torch.tensor([350.0], device=torch.device("cuda:0"))
         self.attractor_decay = torch.tensor([1.0], device=torch.device("cuda:0"))
@@ -105,14 +106,17 @@ class RayCost(CostBase):
         center_idx = final_cost.shape[1] // 2
         indices = torch.full((final_cost.shape[0], final_cost.shape[1]), center_idx, dtype=torch.long, device=torch.device("cuda:0"))
         mask = mask.scatter_(1, indices, True)
+        # center_idx = final_cost.shape[1] // 2
+        # indices = torch.full((final_cost.shape[0], final_cost.shape[1]), center_idx, dtype=torch.long, device=torch.device("cuda:0"))
+        # mask = mask.scatter_(1, indices, True)
         final_cost = final_cost * mask
         final_cost = final_cost * scaler
 
         ori_distances_always_look_here = ori_distances_always_look_here * ~mask
-        ori_distances_always_look_here = ori_distances_always_look_here * (scaler / 50.0)
+        ori_distances_always_look_here = ori_distances_always_look_here * 1.0 #(scaler / 50.0)
         final_cost = final_cost + ori_distances_always_look_here
 
-        return final_cost.float() #* self.weight
+        return final_cost.float() * self.weight
     
     #origin to camera pose vector cross product each ray then we only want to be attracted to the closest ray so we do the norm then min
     def ray_pos_distance(self, camera_pos_batch, origins, rays): #[batch, trajectory, 1, 3], [1, 1, points, 3], [1, points, rays, 3]
